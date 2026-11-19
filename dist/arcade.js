@@ -343,11 +343,11 @@ export const balloonGame = {
     }
     s.sparks=s.sparks.filter(p=>p.life>0);
   },
-  draw(ctx, {w,h}) {
+  draw(ctx, {w,h,cameraVisible}) {
     const s=balloons;
     if (!s) return;
     ctx.save();
-    fairground(ctx,w,h,s.age);
+    if (!cameraVisible) fairground(ctx,w,h,s.age);
     const unit=Math.min(w,h);
     for (const b of s.targets) {
       const x = b.x * w, y = b.y * h, r = b.r * unit;

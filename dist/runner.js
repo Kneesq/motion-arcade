@@ -161,8 +161,8 @@ function starShape(ctx,x,y,r,fill,outline,angle=0) {
   polygon(ctx,vertices,fill,outline);
 }
 
-function projection(w,h,c,age,player) {
-  const horizon=h*(.44+Math.sin(age*8.5+c.variant)*.002);
+function projection(w,h,c,age,player,cameraVisible) {
+  const horizon=h*((cameraVisible ? .60 : .44)+Math.sin(age*8.5+c.variant)*.002);
   const halfRoad=w*.71;
   const bend=Math.sin(age*.32+c.variant*2.4)*w*.068;
   const eyeHeight=1-(player?.head ?? 0)*.37;
@@ -183,10 +183,11 @@ function band(ctx,project,a,b,left,right,color) {
   polygon(ctx,[[p.x,p.y],[q.x,q.y],[r.x,r.y],[t.x,t.y]],color);
 }
 
-function road(ctx,w,h,c,age,view) {
+function road(ctx,w,h,c,age,view,cameraVisible) {
   const theme=scenes[c.scene],project=view.project;
+  const surface = cameraVisible ? theme.road.map(color => color+'28') : theme.road;
   const baseLeft=project(29,-1),baseRight=project(29,1);
-  polygon(ctx,[[view.vanishingX,view.horizon],[baseRight.x,baseRight.y],[baseLeft.x,baseLeft.y]],theme.road[0]);
+  polygon(ctx,[[view.vanishingX,view.horizon],[baseRight.x,baseRight.y],[baseLeft.x,baseLeft.y]],surface[0]);
   const distance=age*(4.6+c.stage*.2)+c.variant*1.6;
   const phase=distance%1;
   for(let i=30;i>=-1;i--) {
@@ -194,7 +195,7 @@ function road(ctx,w,h,c,age,view) {
     if(b<=a) continue;
     const index=Math.floor(distance)+i;
     const shade=Math.abs(index%2);
-    band(ctx,project,a,b,-1,1,theme.road[shade]);
+    band(ctx,project,a,b,-1,1,surface[shade]);
     for(const sign of [-1,1]) {
       band(ctx,project,a,b,sign*.97,sign*1.04,theme.edge[shade]);
       if(c.scene===0) band(ctx,project,a,b,sign*1.04,sign*1.07,theme.edge[1-shade]);
@@ -311,23 +312,28 @@ function displayCue(c,age,versus,player) {
   if (isPickup) instruction=c.pick.star?'星星 · 回到路中央':'金币 · 移到金币一侧';
   else instruction='前方障碍';
   const move=isPickup?c.pick.move:c.kind;
+  const timing=now?'现在':'准备';
+  const target=isPickup ? c.pick.star?'星星居中':'金币' : '障碍';
   return {
-    message:(now?'现在':'准备')+' · '+actionLabels[move],
+    message:timing+' · '+actionLabels[move],
+    shortText:target+' · '+timing+actionLabels[move],
     instruction, progress:clamp((age-start)/(arrival-start),0,1),
     color:now?'#e2f8a3':isPickup?'#fff0ba':paper
   };
 }
 
-function drawScores(ctx,w,h,s,ids) {
+function drawScores(ctx,w,h,s,ids,cameraVisible) {
   const unit=Math.min(w,h);
   const fontSize=clamp(unit*.044,12,22);
   const gap=clamp(unit*.015,4,8);
   const single=ids.length===1;
-  const width=Math.min((w-gap*(ids.length+1))/ids.length,single?fontSize*15:fontSize*9.6);
+  const singleWidth=cameraVisible ? 10.3 : 15;
+  const width=Math.min((w-gap*(ids.length+1))/ids.length,fontSize*(single?singleWidth:9.6));
   const height=fontSize*(single?2.05:2.88);
   const start=(w-width*ids.length-gap*(ids.length-1))*.5;
+  const y=h-height-gap;
   for(let i=0;i<ids.length;i++) {
-    const id=ids[i],p=s.players[id],x=start+i*(width+gap),y=h-height-gap;
+    const id=ids[i],p=s.players[id],x=start+i*(width+gap);
     const recent=p.note && s.age-p.note.at<.72;
     const bg=recent ? p.note.yes?'#e0f4a9':'#ffe4d6' : paper;
     ctx.lineWidth=1.25;
@@ -348,13 +354,13 @@ function drawScores(ctx,w,h,s,ids) {
   }
 }
 
-function hud(ctx,w,h,c,s,player) {
+function hud(ctx,w,h,c,s,player,cameraVisible) {
   const unit=Math.min(w,h), margin=clamp(unit*.026,5,16);
   const size=clamp(unit*.045,12,22);
   const split=s.players.length===2;
   const title=(split?'P'+(player.id+1)+' · ':'')+scenes[c.scene].name;
-  const stageLabel=c.ids.length>1?'团队':'本关';
-  const status=s.versus ? (c.index+1)+' / 12' : (c.index+1)+'/12 · '+stageLabel+' '+c.cleared+'/4';
+  const stageLabel=w<180 ? '' : c.ids.length>1?'团队 ':'本关 ';
+  const status=s.versus ? (c.index+1)+' / 12' : (c.index+1)+'/12 · '+stageLabel+c.cleared+'/4';
   ctx.font=font(size,800);
   const headerW=Math.min(w-margin*2,ctx.measureText(title+'   '+status).width+size*1.55);
   const headerH=size*1.85;
@@ -363,27 +369,38 @@ function hud(ctx,w,h,c,s,player) {
   label(ctx,title,margin+size*.7,margin+headerH*.5,size,ink,'left',800);
   label(ctx,status,margin+headerW-size*.65,margin+headerH*.5,size*.90,ink,'right',750);
   const cue=displayCue(c,s.age,s.versus,player);
-  const cueSize=clamp(unit*.055,14,29),cueH=cueSize*3.02,cueW=cueSize*8.0;
-  const x=(w-cueW)*.5,y=margin+headerH+margin*.6;
+  const cueSize=clamp(unit*(cameraVisible ? .045 : .055),14,cameraVisible ? 22 : 29);
+  // Short phone viewports need one cue line to keep faces and obstacles visible.
+  const compact=cameraVisible && h<270;
+  const prompt=cue.shortText || cue.message;
+  ctx.font=font(cueSize*.9,800);
+  const cueW=compact ? Math.min(w-margin*2,ctx.measureText(prompt).width+cueSize*1.2) : cueSize*8.0;
+  const cueH=cueSize*(compact ? 1.85 : cameraVisible ? 2.8 : 3.02);
+  const sameRow=cameraVisible && w>=headerW+cueW+margin*3;
+  const x=cameraVisible ? (sameRow ? w-cueW-margin : margin) : (w-cueW)*.5;
+  const y=sameRow ? margin : margin+headerH+margin*.6;
   panel(ctx,x,y,cueW,cueH,cueSize*.8,cue.color,ink);
-  label(ctx,cue.instruction,w*.5,y+cueSize*.65,Math.max(11,cueSize*.68),ink,'center');
-  label(ctx,cue.message,w*.5,y+cueSize*1.69,cueSize,ink,'center',850);
-  const bx=x+cueSize*.72,by=y+cueH-cueSize*.49,bw=cueW-cueSize*1.44,bh=cueSize*.17;
+  if(compact) label(ctx,prompt,x+cueW*.5,y+cueSize*.77,cueSize*.9,ink,'center',800);
+  else {
+    label(ctx,cue.instruction,x+cueW*.5,y+cueSize*.65,Math.max(11,cueSize*.68),ink,'center');
+    label(ctx,cue.message,x+cueW*.5,y+cueSize*1.69,cueSize,ink,'center',850);
+  }
+  const bx=x+cueSize*.72,by=y+cueH-cueSize*(compact ? .36 : .49),bw=cueW-cueSize*1.44,bh=cueSize*.17;
   panel(ctx,bx,by,bw,bh,bh*.5,'#cfd4c0');
   panel(ctx,bx,by,Math.max(bh,bw*cue.progress),bh,bh*.5,ink);
-  drawScores(ctx,w,h,s,player?[player.id]:c.ids);
+  drawScores(ctx,w,h,s,player?[player.id]:c.ids,cameraVisible);
 }
 
-function drawView(ctx,x,y,w,h,c,s,player) {
-  const view=projection(w,h,c,s.age,player);
+function drawView(ctx,x,y,w,h,c,s,player,cameraVisible) {
+  const view=projection(w,h,c,s.age,player,cameraVisible);
   ctx.save();ctx.translate(x,y);
   ctx.beginPath();ctx.rect(0,0,w,h);ctx.clip();
-  horizonScene(ctx,w,h,c,s.age,view.horizon);
-  road(ctx,w,h,c,s.age,view);
+  if (!cameraVisible) horizonScene(ctx,w,h,c,s.age,view.horizon);
+  road(ctx,w,h,c,s.age,view,cameraVisible);
   gate(ctx,w,h,c,view,s.age);
   pickup(ctx,w,h,c,view,s.age);
   pickupBurst(ctx,w,h,c,s.age,player);
-  hud(ctx,w,h,c,s,player);
+  hud(ctx,w,h,c,s,player,cameraVisible);
   ctx.restore();
 }
 
@@ -420,24 +437,26 @@ export const runnerGame = {
     for(const course of s.courses) progressCourse(s,course);
     if(s.courses.every(c=>c.done)) finish(s);
   },
-  draw(ctx,{w,h}) {
+  draw(ctx,{w,h,cameraVisible=false}) {
     const s=game;
     if(!s || w<=0 || h<=0) return;
     if(s.players.length!==2) {
       const player=s.players.length===1?s.players[0]:null;
-      drawView(ctx,0,0,w,h,s.courses[0],s,player);
+      drawView(ctx,0,0,w,h,s.courses[0],s,player,cameraVisible);
       return;
     }
-    const horizontal=w/h>=1.18;
+    // Both real players appear side by side in the same camera image.
+    const horizontal=cameraVisible || w/h>=1.18;
     const gap=clamp(Math.min(w,h)*.013,3,8);
     const width=horizontal?(w-gap)/2:w;
     const height=horizontal?h:(h-gap)/2;
-    ctx.fillStyle=ink;
-    ctx.fillRect(0,0,w,h);
+    ctx.fillStyle=cameraVisible ? 'rgba(255,253,243,.70)' : ink;
+    if(horizontal) ctx.fillRect(width,0,gap,h);
+    else ctx.fillRect(0,height,w,gap);
     // Co-op views follow the same obstacles and team progression. Each camera
     // and scorecard follows only its player, even when both collect together.
-    drawView(ctx,0,0,width,height,s.courses[0],s,s.players[0]);
-    drawView(ctx,horizontal?width+gap:0,horizontal?0:height+gap,width,height,s.versus?s.courses[1]:s.courses[0],s,s.players[1]);
+    drawView(ctx,0,0,width,height,s.courses[0],s,s.players[0],cameraVisible);
+    drawView(ctx,horizontal?width+gap:0,horizontal?0:height+gap,width,height,s.versus?s.courses[1]:s.courses[0],s,s.players[1],cameraVisible);
   },
   action(id,move) {
     const s=game;

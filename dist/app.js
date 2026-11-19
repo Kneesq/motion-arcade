@@ -22,7 +22,23 @@ try {
   if (saved?.camera === 'environment') prefs.camera = saved.camera;
 } catch {}
 const panel = $('panel'), stage = $('stage'), canvas = $('screen'), ctx = canvas.getContext('2d');
-const tracker = new MotionTracker($('camera'));
+const camera = $('camera'), playfield = $('playfield'), surface = playfield.parentElement;
+const tracker = new MotionTracker(camera);
+// The video and game use one uncropped rectangle, so a tracked hand, its marker,
+// and a target all use the same coordinates, including after rotating the phone.
+function fitCamera() {
+  if (camera.hidden || !camera.videoWidth || !camera.videoHeight) {
+    playfield.style.removeProperty('width');
+    playfield.style.removeProperty('height');
+    return;
+  }
+  const scale = Math.min(surface.clientWidth / camera.videoWidth, surface.clientHeight / camera.videoHeight);
+  playfield.style.width = camera.videoWidth * scale + 'px';
+  playfield.style.height = camera.videoHeight * scale + 'px';
+}
+camera.addEventListener('loadedmetadata', fitCamera);
+camera.addEventListener('resize', fitCamera);
+new ResizeObserver(fitCamera).observe(surface);
 const gameOptions = mountGameOptions($('game-options'));
 let featured = 0, chosen = 0, phase = 'lobby', mode = 'demo', revision = 0;
 let raf = 0, lastTime = 0, elapsed = 0, loseSince = 0, readySince = 0, demoPlayer = 0;
@@ -119,9 +135,10 @@ function overlay(title,description,buttons = []) {
   $('intermission').hidden = false;
 }
 function closeRound() {
+  camera.hidden = true;
   revision++; cancelAnimationFrame(raf); raf = 0; tracker.stop(); game.stop();
   gameAudio.stop();
-  $('camera-box').hidden = true; stage.classList.remove('calibrating');
+  fitCamera(); $('camera-count').hidden = true; stage.classList.remove('calibrating');
   $('controls').hidden = true; $('intermission').hidden = true;
   lastTime = 0; elapsed = 0; loseSince = 0; readySince = 0;
 }
@@ -140,9 +157,7 @@ function fail(error) {
 }
 function ready(players) { return players.length === prefs.players && players.every(p => p.calibrated); }
 function cameraCount(players) {
-  const count = players.length + ' / ' + prefs.players;
-  const compact = stage.classList.contains('race-camera') && !stage.classList.contains('calibrating');
-  const label = compact ? count : '已识别 ' + count + ' 人';
+  const label = '入镜 ' + players.length + ' / ' + prefs.players + ' 人';
   if ($('camera-count').textContent !== label) $('camera-count').textContent = label;
 }
 async function begin(requestMode) {
@@ -152,7 +167,6 @@ async function begin(requestMode) {
     ? roundOptions.playerColors.map((key, id) => balloonPalette.find(c => c.key === key)?.color || palette[id])
     : palette;
   stage.dataset.game = games[chosen].id;
-  stage.classList.toggle('race-camera', mode === 'camera' && twoRunnerViews());
   const token = revision;
   if (gameAudio.enabled) {
     if (game === danceGame) danceGame.unlockAudio();
@@ -161,11 +175,12 @@ async function begin(requestMode) {
   if (panel.open) panel.close();
   $('lobby').hidden = true; stage.hidden = false; $('pause').disabled = true;
   document.body.style.overflow = 'hidden'; $('stage-title').textContent = games[chosen].title;
-  $('session-mode').textContent = mode === 'camera' ? '相机模式' : '触控试玩'; demoPlayer = 0;
+  $('session-mode').hidden = mode === 'camera';
+  demoPlayer = 0;
   $('fullscreen').hidden = !stage.requestFullscreen || !document.fullscreenEnabled;
   ctx.clearRect(0,0,canvas.width,canvas.height); buildControls();
   if (mode === 'demo') { await startRound(token); return; }
-  phase = 'loading'; stage.classList.add('calibrating'); $('camera-box').hidden = false;
+  phase = 'loading'; stage.classList.add('calibrating'); camera.hidden = false; $('camera-count').hidden = false;
   $('camera-count').textContent = '等待镜头';
   overlay('准备镜头','请在浏览器中允许使用相机。',[button('返回设置',setupAgain)]);
   try {
@@ -173,6 +188,7 @@ async function begin(requestMode) {
       if (token === revision && phase === 'loading') $('inter-desc').textContent = message;
     },onError:error => { if (token === revision) fail(error); }});
     if (revision !== token) return;
+    fitCamera();
     phase = 'calibrate';
     overlay('请玩家站好','所有玩家并肩站直，保持手脚入镜。识别齐全后自动开始。',[button('返回设置',setupAgain)]);
     raf = requestAnimationFrame(function calibrate(t) {
@@ -248,11 +264,13 @@ function tick(now) {
       if (now-loseSince > 1800) { pause('请回到镜头前','所有玩家重新入镜后，点「继续游戏」。'); return; }
     } else loseSince = 0;
   }
-  const frame = {w,h,dt,time:elapsed,players};
+  const frame = {w,h,dt,time:elapsed,players,cameraVisible:mode === 'camera'};
   game.update(frame);
   if (phase !== 'playing') return;
   if (w && h) {
-    ctx.setTransform(dpr,0,0,dpr,0,0); ctx.save(); game.draw(ctx,frame); ctx.restore();
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    if (frame.cameraVisible) ctx.clearRect(0,0,w,h);
+    ctx.save(); game.draw(ctx,frame); ctx.restore();
     if (game === balloonGame && mode === 'camera') markers(players,w,h);
   }
   raf = requestAnimationFrame(tick);
