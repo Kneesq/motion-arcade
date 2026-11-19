@@ -28,6 +28,8 @@
     <symbol id="i-camera" viewBox="0 0 24 24"><path d="M3 7h4l2-3h6l2 3h4v13H3Z"/><circle cx="12" cy="13" r="3.5"/></symbol>
     <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14m8-14v14" stroke-width="4"/></symbol>
     <symbol id="i-max" viewBox="0 0 24 24"><path d="M4 9V4h5m6 0h5v5m0 6v5h-5m-6 0H4v-5"/></symbol>
+    <symbol id="i-sound" viewBox="0 0 24 24"><path d="M3 9h4l5-4v14l-5-4H3zM16 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></symbol>
+    <symbol id="i-mute" viewBox="0 0 24 24"><path d="M3 9h4l5-4v14l-5-4H3zM16 9l5 6m0-6-5 6"/></symbol>
   </svg>
   <div id="lobby">
     <header class="topbar"><div class="bar-inner">
@@ -45,7 +47,7 @@
         </div>
         <div class="carousel"><button id="prev" aria-label="上一个精选游戏"><svg><use href="#i-left"/></svg></button><span id="hero-count">01 <i>/</i> 03</span><button id="next" aria-label="下一个精选游戏"><svg><use href="#i-right"/></svg></button></div>
       </section>
-      <section id="games" aria-labelledby="library-title"><div class="section-head"><div><div class="section-title"><span class="grid-icon"><svg><use href="#i-grid"/></svg></span><h2 id="library-title">游戏大厅</h2></div><p>选一个游戏，让身体变成控制器。</p></div><button class="settings-button" id="settings"><svg><use href="#i-settings"/></svg>游玩设置</button></div>
+      <section id="games" aria-labelledby="library-title"><div class="section-head"><div><div class="section-title"><span class="grid-icon"><svg><use href="#i-grid"/></svg></span><h2 id="library-title">游戏大厅</h2></div><p>选一个游戏，让身体变成控制器。</p></div><div class="lobby-tools"><button type="button" class="settings-button" data-sound-toggle aria-label="游戏声音" aria-pressed="true"><svg><use href="#i-sound"/></svg><span>声音开</span></button><button class="settings-button" id="settings"><svg><use href="#i-settings"/></svg>游玩设置</button></div></div>
         <div class="game-cards" id="cards"></div>
       </section>
     </main>
@@ -59,6 +61,7 @@
   </section>
   <dialog id="panel" aria-labelledby="panel-title"><div class="dialog-inner"><div class="dialog-head"><h2 id="panel-title"></h2><button id="close" class="icon-button" aria-label="关闭"><svg><use href="#i-close"/></svg></button></div>
     <div id="setup-content" hidden><div class="chosen-game" id="chosen-game"></div>
+      <div class="setup-sound"><span>游戏声音</span><button type="button" class="settings-button" data-sound-toggle aria-label="游戏声音" aria-pressed="true"><svg><use href="#i-sound"/></svg><span>声音开</span></button></div>
       <fieldset><legend>玩家人数</legend><div class="segments" data-opt="players"><button data-value="1">1 人</button><button data-value="2">2 人</button><button data-value="3">3 人</button><button data-value="4">4 人</button></div></fieldset>
       <fieldset><legend>手机镜头</legend><div class="segments" data-opt="camera"><button data-value="user">前置镜头</button><button data-value="environment">后置镜头</button></div></fieldset>
       <fieldset><legend>动作侦测</legend><div class="segments" data-opt="points"><button data-value="2">双手 · 2 点</button><button data-value="4">双手双脚 · 4 点</button></div></fieldset>

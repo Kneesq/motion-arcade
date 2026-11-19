@@ -2,6 +2,7 @@ import {MotionTracker} from './tracker.js';
 import {balloonGame, balloonPalette} from './arcade.js';
 import {runnerGame} from './runner.js';
 import {mountGameOptions} from './game-options.js';
+import {gameAudio} from './sound.js';
 import {danceGame, mountDanceEditor} from './dance.js';
 
 const $ = id => document.getElementById(id);
@@ -9,7 +10,7 @@ const icon = name => '<svg aria-hidden="true"><use href="#i-' + name + '"/></svg
 const games = [
   {id:'balloon', title:'气球爆破', en:'BALLOON POP', tag:'反应挑战', detail:'挥动双手，戳破从天而降的气球和泡泡！', short:'戳破气球与泡泡，多人还可挑战专属颜色。', meta:'动作捕捉', game:balloonGame},
   {id:'dance', title:'节拍舞台', en:'BEAT STUDIO', tag:'音乐节奏', detail:'上传喜欢的歌，编排属于你的十种舞步。', short:'上传你的音乐，自由组合专属舞步。', meta:'自由编舞', game:danceGame},
-  {id:'runner', title:'冒险跑酷', en:'RUSH RUN', tag:'冒险闯关', detail:'穿过童话跑道，收集一路的星星和金币！', short:'一起收集星星与金币，或双人分屏竞赛。', meta:'第一视角', game:runnerGame}
+  {id:'runner', title:'冒险跑酷', en:'RUSH RUN', tag:'冒险闯关', detail:'跑过天空、森林和海底，收集星星和金币！', short:'一起收集星星与金币，或双人分屏竞赛。', meta:'第一视角', game:runnerGame}
 ];
 const actions = {left:'向左',right:'向右',jump:'跳跃',duck:'下蹲',hit:'跟拍'};
 const palette = ['#d5f75a','#ffb094','#9adfff','#dabaff'];
@@ -28,6 +29,24 @@ let raf = 0, lastTime = 0, elapsed = 0, loseSince = 0, readySince = 0, demoPlaye
 let game = games[0].game;
 let roundOptions, markerPalette = palette;
 let editorMounted = false;
+const soundButtons = document.querySelectorAll('[data-sound-toggle]');
+function showSoundSetting() {
+  const enabled = gameAudio.enabled;
+  document.body.classList.toggle('sound-muted', !enabled);
+  for (const control of soundButtons) {
+    control.setAttribute('aria-pressed', String(enabled));
+    control.querySelector('use').setAttribute('href', enabled ? '#i-sound' : '#i-mute');
+    control.querySelector('span').textContent = enabled ? '声音开' : '声音关';
+    control.title = enabled ? '关闭声音' : '开启声音';
+  }
+  if (!enabled) $('dance-editor').querySelector('audio')?.pause();
+}
+for (const control of soundButtons) control.onclick = () => {
+  gameAudio.setEnabled(!gameAudio.enabled);
+  showSoundSetting();
+};
+showSoundSetting();
+function twoRunnerViews() { return game === runnerGame && prefs.players === 2; }
 const img = g => 'assets/' + g.id + '.webp';
 function button(text, action, primary = false) {
   const b = document.createElement('button');
@@ -87,7 +106,7 @@ function openSetup(index) {
   $('chosen-game').innerHTML = '<img alt="" src="' + img(g) + '"><span>' + g.title + '<small>' + g.en + '</small></span>';
   renderPrefs(); showPanel('游玩设置', true); panel.scrollTop = 0;
 }
-const guide = '<p class="intro">把手机放稳，让镜头同时看到所有玩家。横屏游玩时，左右移动的空间更大。</p><section class="info-block"><h3>选择人数和镜头</h3><p>可选 1 至 4 人、前置或后置镜头。面向镜头并肩站好，保持双手、双脚可见，站直片刻完成定位。</p></section><section class="info-block"><h3>选择侦测点</h3><p>双手模式用左右手玩游戏，四点模式加入两只脚。跑酷会同时参考身体中心，识别跳跃、下蹲和侧移。</p></section><section class="info-block"><h3>开始游玩</h3><p>气球或透明泡泡会从上方落下。多人可选「指定颜色」，碰对加 10 分，碰错扣 5 分。舞蹈可选歌编舞，跟随自己的小舞者做动作。跑酷可以躲障碍、收集金币和星星，双人可选合作闯关或分屏对战。</p></section><section class="info-block"><h3>相机权限</h3><p>用 Safari 或 Chrome 打开 HTTPS 游戏网址，并在浏览器提示时允许相机。画面在手机本机分析，返回大厅后镜头会关闭。</p></section>';
+const guide = '<p class="intro">把手机放稳，让镜头同时看到所有玩家。横屏游玩时，左右移动的空间更大。</p><section class="info-block"><h3>选择人数和镜头</h3><p>可选 1 至 4 人、前置或后置镜头。面向镜头并肩站好，保持双手、双脚可见，站直片刻完成定位。</p></section><section class="info-block"><h3>选择侦测点</h3><p>双手模式用左右手玩游戏，四点模式加入两只脚。跑酷会同时参考身体中心，识别跳跃、下蹲和侧移。</p></section><section class="info-block"><h3>开始游玩</h3><p>气球或透明泡泡会从上方落下。多人可选「指定颜色」，碰对加 10 分，碰错扣 5 分。舞蹈可选歌编舞，跟随自己的小舞者做动作。跑酷可以躲障碍、收集金币和星星，双人各有一条跑道，可合作闯关或对战。</p></section><section class="info-block"><h3>相机权限</h3><p>用 Safari 或 Chrome 打开 HTTPS 游戏网址，并在浏览器提示时允许相机。画面在手机本机分析，返回大厅后镜头会关闭。</p></section>';
 const cast = '<p class="intro">手机负责识别动作，电视同步显示整场游戏。先让手机和电视连接同一个 Wi-Fi。</p><section class="info-block"><h3>iPhone · AirPlay</h3><p>打开控制中心，点「屏幕镜像」，选择 Apple TV 或支持 AirPlay 的电视，再回到游戏横屏游玩。</p><a href="https://support.apple.com/zh-cn/102661" target="_blank" rel="noopener">Apple 屏幕镜像说明</a></section><section class="info-block"><h3>Android · Google Cast</h3><p>打开 Google Home，长按支持 Google Cast 的电视或 Chromecast，选择投放屏幕。若系统询问分享范围，选择整个屏幕或正在玩的浏览器，再回到 Chrome。</p><a href="https://support.google.com/googlecast/answer/6059461?hl=zh-Hans" target="_blank" rel="noopener">Google 投屏说明</a></section>';
 document.querySelectorAll('[data-dialog]').forEach(b => b.onclick = () => {
   if (phase === 'playing') pause('游戏已暂停');
@@ -101,6 +120,7 @@ function overlay(title,description,buttons = []) {
 }
 function closeRound() {
   revision++; cancelAnimationFrame(raf); raf = 0; tracker.stop(); game.stop();
+  gameAudio.stop();
   $('camera-box').hidden = true; stage.classList.remove('calibrating');
   $('controls').hidden = true; $('intermission').hidden = true;
   lastTime = 0; elapsed = 0; loseSince = 0; readySince = 0;
@@ -132,9 +152,12 @@ async function begin(requestMode) {
     ? roundOptions.playerColors.map((key, id) => balloonPalette.find(c => c.key === key)?.color || palette[id])
     : palette;
   stage.dataset.game = games[chosen].id;
-  stage.classList.toggle('race-camera', mode === 'camera' && roundOptions.runnerMode === 'versus');
+  stage.classList.toggle('race-camera', mode === 'camera' && twoRunnerViews());
   const token = revision;
-  if (game === danceGame) danceGame.unlockAudio();
+  if (gameAudio.enabled) {
+    if (game === danceGame) danceGame.unlockAudio();
+    else gameAudio.unlock();
+  }
   if (panel.open) panel.close();
   $('lobby').hidden = true; stage.hidden = false; $('pause').disabled = true;
   document.body.style.overflow = 'hidden'; $('stage-title').textContent = games[chosen].title;
@@ -168,7 +191,9 @@ async function startRound(token) {
   phase = 'starting'; stage.classList.remove('calibrating');
   overlay('正在开始',games[chosen].title);
   try {
-    await game.start({...prefs,...roundOptions,mode,onFinish:(scores,details) => {if (revision === token) finish(scores,details);}});
+    await game.start({...prefs,...roundOptions,mode,soundEnabled:gameAudio.enabled,
+      onSfx:(name,id) => { if (revision === token) gameAudio.play(name,id); },
+      onFinish:(scores,details) => { if (revision === token) finish(scores,details); }});
     if (revision !== token) return;
     phase = 'playing'; lastTime = 0; elapsed = 0; $('pause').disabled = false;
     $('intermission').hidden = true;
@@ -234,6 +259,7 @@ function tick(now) {
 }
 function pause(title,description = '准备好后继续本局。') {
   if (phase !== 'playing') return;
+  gameAudio.stop();
   phase = 'paused'; cancelAnimationFrame(raf); game.pause?.(); $('pause').disabled = true;
   overlay(title,description,[button('继续游戏',resume,true),button('返回大厅',lobby)]);
 }
@@ -244,6 +270,7 @@ async function resume() {
   }
   const token = revision; phase = 'resuming';
   try {
+    if (game !== danceGame && gameAudio.enabled) gameAudio.unlock();
     await game.resume?.(); if (token !== revision) return;
     lastTime = 0; loseSince = 0; phase = 'playing'; $('pause').disabled = false;
     $('intermission').hidden = true;
@@ -258,7 +285,7 @@ $('fullscreen').onclick = async () => {
 };
 function buildControls() {
   const root = $('controls'); root.replaceChildren(); root.hidden = true;
-  const race = roundOptions.runnerMode === 'versus';
+  const race = twoRunnerViews();
   root.classList.toggle('split-controls', race);
   if (mode !== 'demo') return;
   if (race) {
@@ -294,7 +321,7 @@ canvas.addEventListener('pointerdown',e => {
 });
 window.addEventListener('keydown',e => {
   if (phase !== 'playing' || panel.open || e.repeat || e.target.tagName === 'SELECT') return;
-  if (mode === 'demo' && roundOptions.runnerMode === 'versus') {
+  if (mode === 'demo' && twoRunnerViews()) {
     const p1 = {KeyA:'left',KeyW:'jump',KeyS:'duck',KeyD:'right'}[e.code];
     const p2 = {ArrowLeft:'left',ArrowUp:'jump',ArrowDown:'duck',ArrowRight:'right'}[e.key];
     if (p1 || p2) { e.preventDefault(); input(p1 || p2, p1 ? 0 : 1); return; }
