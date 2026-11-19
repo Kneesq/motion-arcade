@@ -9,7 +9,7 @@ const $ = id => document.getElementById(id);
 const icon = name => '<svg aria-hidden="true"><use href="#i-' + name + '"/></svg>';
 const games = [
   {id:'balloon', title:'气球爆破', en:'BALLOON POP', tag:'反应挑战', detail:'挥动双手，戳破从天而降的气球和泡泡！', short:'戳破气球与泡泡，多人还可挑战专属颜色。', meta:'动作捕捉', game:balloonGame},
-  {id:'dance', title:'节拍舞台', en:'BEAT STUDIO', tag:'音乐节奏', detail:'上传喜欢的歌，编排属于你的十种舞步。', short:'上传你的音乐，自由组合专属舞步。', meta:'自由编舞', game:danceGame},
+  {id:'dance', title:'节拍舞台', en:'BEAT STUDIO', tag:'音乐节奏', detail:'上传喜欢的歌，用 14 种动作编排自己的舞步。', short:'跟拍横划、摆手、跳跃，自由组合舞步。', meta:'自由编舞', game:danceGame},
   {id:'runner', title:'冒险跑酷', en:'RUSH RUN', tag:'冒险闯关', detail:'跑过天空、森林和海底，收集星星和金币！', short:'一起收集星星与金币，或双人分屏竞赛。', meta:'第一视角', game:runnerGame}
 ];
 const actions = {left:'向左',right:'向右',jump:'跳跃',duck:'下蹲',hit:'跟拍'};
