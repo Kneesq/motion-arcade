@@ -92,6 +92,8 @@
 .dance-editor .de-bank { display: grid; grid-template-columns: repeat(auto-fit, minmax(78px,1fr)); gap: 6px; }
 .dance-editor .de-bank button { white-space: nowrap; padding-inline: 6px; font-weight: 550; }
 .dance-editor .de-bank [aria-pressed="true"] { border-color: var(--de-ink); background: var(--de-accent); }
+.dance-editor .de-bank h4 { grid-column: 1 / -1; margin: 5px 0 1px; font-size: 14px; }
+.dance-editor .de-bank button { min-width: 0; white-space: normal; line-height: 1.35; }
 @media (max-width: 460px) {
   .dance-editor { gap: 12px; }
   .dance-editor .de-bank { grid-template-columns: repeat(3,minmax(0,1fr)); }

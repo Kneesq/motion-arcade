@@ -1,4 +1,6 @@
 import {drawDancer} from './dancers.js';
+import {dynamicMoves, sampleDanceMove, drawDanceMotionCue} from './dance-moves.js';
+import {createDanceMotionTracker} from './dance-motion.js';
 
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
 const colors = ['#c6fa69', '#74d8ff', '#ff9dc6', '#ffcc72'];
@@ -12,11 +14,12 @@ const poses = [
   { name: '双臂交叉', two: '在胸前交叉双臂', hands: [[.34, -.17], [-.34, -.17]] },
   { name: '左侧伸展', two: '左手侧平举，右手放低', four: '左手侧平举，同时抬起左脚', hands: [[-1, -.39], [.52, .3]], feet: [[-.64, .39], [.38, .95]] },
   { name: '右侧伸展', two: '右手侧平举，左手放低', four: '右手侧平举，同时抬起右脚', hands: [[-.52, .3], [1, -.39]], feet: [[-.38, .95], [.64, .39]] },
-  { name: '星形打开', two: '双臂斜向上，打开成 V 形', four: '双臂斜上打开，双脚分开站', hands: [[-.98, -.89], [.98, -.89]], feet: [[-.78, .89], [.78, .89]] }
+  { name: '星形打开', two: '双臂斜向上，打开成 V 形', four: '双臂斜上打开，双脚分开站', hands: [[-.98, -.89], [.98, -.89]], feet: [[-.78, .89], [.78, .89]] },
+  ...dynamicMoves
 ];
 
 const prefsKey = 'motion-party.dance.v1';
-const defaults = { bpm: 112, beats: 4, offset: 0, steps: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] };
+const defaults = { bpm: 112, beats: 4, offset: 0, steps: [0, 10, 11, 3, 12, 7, 8, 13, 4, 9, 1, 2, 5, 6] };
 let settings = loadSettings();
 let song = null;
 let library;
@@ -169,19 +172,27 @@ export function mountDanceEditor(container) {
       button.textContent = (i + 1) + ' · ' + poses[id].name;
       return button;
     }));
-    [...bank.children].forEach((b, i) => b.setAttribute('aria-pressed', String(i === settings.steps[selected])));
+    bank.querySelectorAll('[data-pose]').forEach(b => {
+      b.setAttribute('aria-pressed', String(Number(b.dataset.pose) === settings.steps[selected]));
+    });
     $('[data-edit=before]').disabled = selected === 0;
     $('[data-edit=after]').disabled = selected === settings.steps.length - 1;
     $('[data-edit=remove]').disabled = settings.steps.length <= 1;
     $('[data-edit=add]').disabled = settings.steps.length >= 128;
   }
-  poses.forEach(({name}, i) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.dataset.pose = i;
-    b.textContent = name;
-    bank.append(b);
-  });
+  for (const dynamic of [true, false]) {
+    const heading = document.createElement('h4');
+    heading.textContent = dynamic ? '动态动作' : '定点动作';
+    bank.append(heading);
+    poses.forEach((pose, i) => {
+      if (Boolean(pose.key) !== dynamic) return;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.pose = i;
+      b.textContent = pose.name;
+      bank.append(b);
+    });
+  }
   bpm.value = settings.bpm;
   beats.value = settings.beats;
   offset.value = settings.offset;
@@ -382,6 +393,7 @@ async function start(options = {}) {
     master, buffer, clock, hasSong: Boolean(selected), source: null, beat, interval, firstCue, cueCount, offset,
     duration: songDuration ?? firstCue + (cueCount - 1) * interval + Math.min(.6, beat),
     steps: [...settings.steps], points: Number(options.points) === 4 ? 4 : 2,
+    motion: settings.steps.some(id => poses[id].key) ? createDanceMotionTracker() : null,
     elapsed: 0, origin: clock(), paused: false, index: 0, nextBeat: 0,
     scores: Array(count).fill(0), hits: Array(count).fill(false), feedback: Array(count).fill(''),
     acknowledged: Array(count).fill(false), feedbackAt: Array(count).fill(-9),
@@ -424,6 +436,8 @@ function update(frame) {
   const g = game;
   if (!g || g.paused) return;
   const t = tickTime(g);
+  const players = frame.players || [];
+  g.motion?.update(players, t);
   if (g.master && !g.buffer) {
     const currentBeat = Math.floor(t / g.beat);
     g.nextBeat = Math.max(g.nextBeat, currentBeat);
@@ -444,9 +458,18 @@ function update(frame) {
     ++g.index;
   }
   if (g.index < g.cueCount) {
-    const err = t - cueTime(g), pose = g.steps[g.index % g.steps.length];
+    const target = cueTime(g), err = t - target, pose = g.steps[g.index % g.steps.length];
     if (Math.abs(err) <= halfWindow) {
-      for (const player of frame.players || []) {
+      for (const player of players) {
+        if (g.hits[player.id]) continue;
+        const key = poses[pose].key;
+        if (key) {
+          // Let an early stroke reach its endpoint before grading its timing.
+          if (err < 0) continue;
+          const at = g.motion.matchTime(player.id, key, target, halfWindow);
+          if (at != null) hit(g, player.id, at - target);
+          continue;
+        }
         if (!matchesPose(pose, player, g.points)) continue;
         // A held pose scores at the beat; later arrivals score when first matched.
         g.acknowledged[player.id] = true;
@@ -473,6 +496,7 @@ function action(playerId, actionName) {
 
 function pause() {
   if (!game || game.paused) return;
+  game.motion?.reset();
   game.elapsed = tickTime(game);
   game.paused = true;
   stopSource(game.source);
@@ -492,32 +516,48 @@ async function resume() {
   attachMusic(g);
 }
 
-function text(ctx, value, x, y, size, color, align = 'center', weight = 650) {
+function text(ctx, value, x, y, size, color, align = 'center', weight = 650, maxWidth) {
   ctx.font = weight + ' ' + size + 'px system-ui, "PingFang SC", "Microsoft YaHei", sans-serif';
   ctx.textAlign = align;
   ctx.textBaseline = 'middle';
   ctx.fillStyle = color;
-  ctx.fillText(value, x, y);
+  if (maxWidth) ctx.fillText(value, x, y, maxWidth);
+  else ctx.fillText(value, x, y);
 }
 
 const restingFeet = [[-.32, .95], [.32, .95]];
 
+function sampleStep(g, index, t) {
+  const pose = poses[g.steps[index % g.steps.length]];
+  if (!pose.key) {
+    return {hands:pose.hands, feet:g.points === 4 && pose.feet ? pose.feet : restingFeet, lift:0, squash:1};
+  }
+  // Rehearse on two-beat phrases. The final sweep, pump or jump lands on the scoring beat.
+  const period = Math.min(g.interval, 2 * g.beat);
+  const duration = Math.min(1.12, period * .86);
+  const untilBeat = g.firstCue + index * g.interval - t;
+  const elapsed = .75 * duration - untilBeat;
+  const local = untilBeat > 0 ? ((elapsed % period) + period) % period : elapsed;
+  const progress = clamp(local / duration, 0, 1);
+  return {...sampleDanceMove(pose.key, progress), key:pose.key, progress};
+}
+
 function dancerPose(g, t) {
   const index = Math.min(g.index, g.cueCount - 1);
-  const current = poses[g.steps[index % g.steps.length]];
-  const feet = g.points === 4 && current.feet ? current.feet : restingFeet;
+  const current = sampleStep(g, index, t);
   // The guide changes moves as soon as the previous scoring window closes.
   const windowEnd = g.firstCue + (index - 1) * g.interval + Math.min(.48, g.interval * .36);
   const fraction = clamp((t - windowEnd) / Math.min(.25, g.beat * .48), 0, 1);
-  if (!index || fraction >= 1) return {hands: current.hands, feet};
+  if (!index || fraction >= 1) return current;
 
-  const previous = poses[g.steps[(index - 1) % g.steps.length]];
-  const previousFeet = g.points === 4 && previous.feet ? previous.feet : restingFeet;
+  const previous = sampleStep(g, index - 1, windowEnd);
   const mix = fraction * fraction * (3 - 2 * fraction);
   function blend(from, to) {
     return from.map(([x, y], i) => [x + (to[i][0] - x) * mix, y + (to[i][1] - y) * mix]);
   }
-  return {hands: blend(previous.hands, current.hands), feet: blend(previousFeet, feet)};
+  return {...current, hands:blend(previous.hands, current.hands), feet:blend(previous.feet, current.feet),
+    lift:previous.lift + (current.lift - previous.lift) * mix,
+    squash:previous.squash + (current.squash - previous.squash) * mix};
 }
 
 function drawCast(ctx, g, t, area) {
@@ -548,6 +588,7 @@ function drawCast(ctx, g, t, area) {
     const y = area.y + (row + .5) * cellH - labelSpace / 2 + .045 * size;
     const accent = colors[player];
     drawDancer(ctx, {x, y, size, player, accent, ...pose, beatPosition, points: g.points});
+    if (pose.key) drawDanceMotionCue(ctx, {key:pose.key, progress:pose.progress, x, y, size, accent});
     if (count > 1) {
       const labelY = y + 1.15 * size + labelSpace / 2;
       ctx.fillStyle = '#30223f';
@@ -616,7 +657,8 @@ function draw(ctx, {w, h}) {
   const hintX = band ? w * .46 : headingX;
   const hintY = split ? headingY + titleSize * 1.07 : band ? h * .075 : h * .69;
   const hint = g.points === 4 && pose.four ? pose.four : pose.two;
-  text(ctx, hint, hintX, hintY, Math.max(11, Math.min(18, w * .037, h * .06)), ink, align);
+  const hintWidth = landscape ? w - hintX - pad : w - 2 * pad;
+  text(ctx, hint, hintX, hintY, Math.max(11, Math.min(18, w * .037, h * .06)), ink, align, 650, hintWidth);
   const nextId = g.steps[(g.index + 1) % g.steps.length];
   if (!end && g.index + 1 < g.cueCount) {
     text(ctx, '下一步  ' + poses[nextId].name, hintX, hintY + cap * 1.7, cap, dim, align);

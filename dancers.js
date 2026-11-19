@@ -138,7 +138,7 @@ function face(ctx, profile, accent, player, beat) {
   oval(ctx, .8, 17.2, 2.0, 1.1, '#f5a59e');
 }
 
-export function drawDancer(ctx, {x, y, size, player, accent, hands, feet, beatPosition, points}) {
+export function drawDancer(ctx, {x, y, size, player, accent, hands, feet, beatPosition, points, key, lift = 0, squash = 1}) {
   const profile = profiles[player];
   const angle = Math.PI * (beatPosition + player * .055);
   const rock = Math.sin(angle), bounce = Math.cos(angle * 2);
@@ -153,7 +153,12 @@ export function drawDancer(ctx, {x, y, size, player, accent, hands, feet, beatPo
   ctx.translate(x, y);
   ctx.scale(size / 100, size / 100);
   ctx.lineCap = ctx.lineJoin = 'round';
-  oval(ctx, 0, 107, 43 - bounce * 1.4, 5.1, 'rgba(26,15,38,.35)');
+  oval(ctx, 0, 107, (43 - bounce * 1.4) * (1 - lift), 5.1 - lift * 3, 'rgba(26,15,38,.35)');
+  if (lift || squash !== 1) {
+    ctx.translate(0, 95 - 100 * lift);
+    ctx.scale(1 + (1 - squash) * .2, squash);
+    ctx.translate(0, -95);
+  }
 
   for (let i = 0; i < 2; i++) {
     const side = i * 2 - 1;
@@ -172,6 +177,10 @@ export function drawDancer(ctx, {x, y, size, player, accent, hands, feet, beatPo
     const shoulder = onTorso(side * 19, -29);
     const inward = Math.min(1, Math.max(0, (.32 - side * target[0]) * 2));
     const elbow = [side * (33 + .34 * Math.abs(hand[0])) + hipX, (hand[1] + shoulder[1]) * .5 + 11 + 24 * inward];
+    if (key === 'swipe-left' || key === 'swipe-right') {
+      const crossing = Math.max(0, Math.min(1, -side * hand[0] / 35));
+      elbow[0] += ((hand[0] + shoulder[0]) / 2 - elbow[0]) * crossing;
+    }
     stroke(ctx, shoulder, shoulder, elbow, ink, 17);
     stroke(ctx, shoulder, shoulder, elbow, accent, 12.8);
     return {side, hand, elbow};
