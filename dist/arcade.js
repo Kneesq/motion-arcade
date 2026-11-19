@@ -212,7 +212,7 @@ function wrongHit(s, target, id) {
   s.scores[id] -= 5;
   s.notes[id] = {at:s.age, text:'−5', color:'#ffd0ca'};
   target.flashUntil = s.age + .22;
-  s.onSfx?.('miss');
+  s.onSfx?.('wrong', id);
 }
 
 function burst(s, index, id) {
@@ -225,7 +225,7 @@ function burst(s, index, id) {
     const v = b.r * (2.4 + Math.random()*2.5);
     s.sparks.push({x:b.x,y:b.y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,angle:a,color:i%3===0 ? paper:b.color,life:.52});
   }
-  s.onSfx?.('pop');
+  s.onSfx?.(s.skin === 'bubble' ? 'bubble' : 'balloon', id);
 }
 
 function nearBalloon(b, a, end, w, h) {

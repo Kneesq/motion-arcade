@@ -406,6 +406,26 @@ h1,h2,h3,p {
   height: 17px;
 }
 
+.lobby-tools, .setup-sound {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.setup-sound {
+  justify-content: space-between;
+  margin-top: 14px;
+  font-weight: 650;
+}
+
+body.sound-muted #dance-editor .de-preview {
+  display: none;
+}
+
+@media(max-width:370px) {
+  .lobby-tools [data-sound-toggle] span { display: none; }
+}
+
 .game-cards {
   display: grid;
   grid-template-columns: repeat(3,minmax(0,1fr));

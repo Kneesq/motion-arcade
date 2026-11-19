@@ -343,7 +343,7 @@ function stop() {
   ++generation;
   if (!game) return;
   stopSource(game.source);
-  game.master.disconnect();
+  game.master?.disconnect();
   game = null;
 }
 
@@ -352,11 +352,12 @@ async function start(options = {}) {
   const rev = generation;
   editor?.stopPreview();
   if (mediaLoading) throw Error('歌曲正在读取，请稍后再开始。');
-  await Promise.all([ensureAudio(), restoreSong()]);
+  const audible = options.soundEnabled !== false;
+  await Promise.all([audible ? ensureAudio() : undefined, restoreSong()]);
   if (generation !== rev) return;
   const selected = song;
   let buffer = null;
-  if (selected) {
+  if (selected && audible) {
     if (decoded?.song === selected) buffer = decoded.buffer;
     else {
       try {
@@ -371,15 +372,17 @@ async function start(options = {}) {
   const count = clamp(Number(options.players) || 1, 1, 4);
   const beat = 60 / settings.bpm, interval = beat * settings.beats, offset = settings.offset;
   const firstCue = offset + interval;
-  if (buffer && buffer.duration < firstCue) throw Error('歌曲太短，无法容纳第一步。请缩短前奏、减少每步拍数或换歌。');
-  const cueCount = buffer ? Math.max(1, 1 + Math.floor((buffer.duration - firstCue) / interval)) : settings.steps.length;
-  const master = context.createGain();
-  master.connect(context.destination);
+  const songDuration = buffer?.duration ?? selected?.duration;
+  if (selected && !(songDuration >= firstCue)) throw Error('歌曲太短，无法容纳第一步。请缩短前奏、减少每步拍数或换歌。');
+  const cueCount = selected ? Math.max(1, 1 + Math.floor((songDuration - firstCue) / interval)) : settings.steps.length;
+  const master = audible ? context.createGain() : null;
+  if (master) master.connect(context.destination);
+  const clock = audible ? () => context.currentTime : () => performance.now() / 1000;
   game = {
-    master, buffer, source: null, beat, interval, firstCue, cueCount, offset,
-    duration: buffer ? buffer.duration : firstCue + (cueCount - 1) * interval + Math.min(.6, beat),
+    master, buffer, clock, hasSong: Boolean(selected), source: null, beat, interval, firstCue, cueCount, offset,
+    duration: songDuration ?? firstCue + (cueCount - 1) * interval + Math.min(.6, beat),
     steps: [...settings.steps], points: Number(options.points) === 4 ? 4 : 2,
-    elapsed: 0, origin: context.currentTime, paused: false, index: 0, nextBeat: 0,
+    elapsed: 0, origin: clock(), paused: false, index: 0, nextBeat: 0,
     scores: Array(count).fill(0), hits: Array(count).fill(false), feedback: Array(count).fill(''),
     acknowledged: Array(count).fill(false), feedbackAt: Array(count).fill(-9),
     onFinish: options.onFinish
@@ -407,7 +410,7 @@ function beatSound(g, at, n) {
   tone(bass, bass, n % 2 ? .074 : .105, .23, 'triangle');
 }
 
-function tickTime(g) { return g.paused ? g.elapsed : Math.min(g.duration, Math.max(0, context.currentTime - g.origin)); }
+function tickTime(g) { return g.paused ? g.elapsed : Math.min(g.duration, Math.max(0, g.clock() - g.origin)); }
 function cueTime(g) { return g.firstCue + g.index * g.interval; }
 function hit(g, id, err) {
   if (g.hits[id] || id < 0 || id >= g.scores.length || g.index >= g.cueCount) return;
@@ -421,7 +424,7 @@ function update(frame) {
   const g = game;
   if (!g || g.paused) return;
   const t = tickTime(g);
-  if (!g.buffer) {
+  if (g.master && !g.buffer) {
     const currentBeat = Math.floor(t / g.beat);
     g.nextBeat = Math.max(g.nextBeat, currentBeat);
     while (g.nextBeat * g.beat <= t + .1 && g.nextBeat * g.beat < g.duration) {
@@ -474,17 +477,17 @@ function pause() {
   game.paused = true;
   stopSource(game.source);
   game.source = null;
-  game.master.gain.value = 0;
+  if (game.master) game.master.gain.value = 0;
 }
 
 async function resume() {
   const g = game;
   if (!g || !g.paused) return;
-  await ensureAudio();
+  if (g.master) await ensureAudio();
   if (game !== g || !g.paused) return;
   g.paused = false;
-  g.origin = context.currentTime - g.elapsed;
-  g.master.gain.value = 1;
+  g.origin = g.clock() - g.elapsed;
+  if (g.master) g.master.gain.value = 1;
   g.nextBeat = Math.ceil(g.elapsed / g.beat);
   attachMusic(g);
 }
@@ -536,7 +539,7 @@ function drawCast(ctx, g, t, area) {
   const {columns, cellH, size} = layout;
   const spacing = Math.min(area.w / columns, size * 2.98);
   const pose = dancerPose(g, t);
-  const beatPosition = (t - (g.buffer ? g.offset : 0)) / g.beat;
+  const beatPosition = (t - (g.hasSong ? g.offset : 0)) / g.beat;
 
   for (let player = 0; player < count; player++) {
     const row = Math.floor(player / columns);
