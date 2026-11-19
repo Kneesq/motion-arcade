@@ -1,3 +1,5 @@
+import {drawDancer} from './dancers.js';
+
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
 const colors = ['#c6fa69', '#74d8ff', '#ff9dc6', '#ffcc72'];
 const poses = [
@@ -495,58 +497,63 @@ function text(ctx, value, x, y, size, color, align = 'center', weight = 650) {
   ctx.fillText(value, x, y);
 }
 
-function drawDancer(ctx, pose, points, x, y, size, pulse) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.scale(size, size);
-  ctx.lineCap = ctx.lineJoin = 'round';
-  const feet = points === 4 && pose.feet ? pose.feet : [[-.32, .95], [.32, .95]];
-  function limb(start, bend, end, outer, inner) {
-    ctx.beginPath();
-    ctx.moveTo(...start);
-    ctx.lineTo(...bend);
-    ctx.lineTo(...end);
-    ctx.strokeStyle = outer;
-    ctx.lineWidth = .19;
-    ctx.stroke();
-    ctx.strokeStyle = inner;
-    ctx.lineWidth = .135;
-    ctx.stroke();
+const restingFeet = [[-.32, .95], [.32, .95]];
+
+function dancerPose(g, t) {
+  const index = Math.min(g.index, g.cueCount - 1);
+  const current = poses[g.steps[index % g.steps.length]];
+  const feet = g.points === 4 && current.feet ? current.feet : restingFeet;
+  // The guide changes moves as soon as the previous scoring window closes.
+  const windowEnd = g.firstCue + (index - 1) * g.interval + Math.min(.48, g.interval * .36);
+  const fraction = clamp((t - windowEnd) / Math.min(.25, g.beat * .48), 0, 1);
+  if (!index || fraction >= 1) return {hands: current.hands, feet};
+
+  const previous = poses[g.steps[(index - 1) % g.steps.length]];
+  const previousFeet = g.points === 4 && previous.feet ? previous.feet : restingFeet;
+  const mix = fraction * fraction * (3 - 2 * fraction);
+  function blend(from, to) {
+    return from.map(([x, y], i) => [x + (to[i][0] - x) * mix, y + (to[i][1] - y) * mix]);
   }
-  function joint(point, radius, color) {
-    ctx.beginPath();
-    ctx.arc(...point, radius, 0, 2 * Math.PI);
-    ctx.fillStyle = color;
-    ctx.fill();
+  return {hands: blend(previous.hands, current.hands), feet: blend(previousFeet, feet)};
+}
+
+function drawCast(ctx, g, t, area) {
+  const count = g.scores.length;
+  const labelSize = clamp(area.h * .053, 10, 15);
+  const labelSpace = count > 1 ? labelSize * 1.7 : 0;
+  const grid = columns => {
+    const rows = Math.ceil(count / columns);
+    const cellH = area.h / rows;
+    // Leave room for the widest arm span, head bounce, shoes and player label.
+    return {columns, cellH, size: Math.min(area.w / columns / 2.55, (cellH - labelSpace) / 2.56)};
+  };
+  // Duets stay side by side. Larger casts wrap when it gives them more room.
+  let layout = grid(count);
+  if (count > 2) {
+    const paired = grid(2);
+    if (paired.size > layout.size) layout = paired;
   }
-  ctx.beginPath();
-  ctx.ellipse(0, 1.06, .63, .09, 0, 0, Math.PI * 2);
-  ctx.fillStyle = '#25132d';
-  ctx.fill();
-  const sides = [-1, 1], edge = '#2c2141';
-  const limbColor = ['#c6fa69', '#f1e8ff'];
-  for (let i = 0; i < 2; i++) {
-    const side = sides[i], foot = feet[i];
-    const knee = [side * (Math.abs(foot[0]) * .72 + .09), foot[1] < .7 ? .34 : .58];
-    limb([side * .16, .15], knee, foot, edge, limbColor[i]);
-    if (points === 4) joint(foot, .105, '#f7c7ff');
+  const {columns, cellH, size} = layout;
+  const spacing = Math.min(area.w / columns, size * 2.98);
+  const pose = dancerPose(g, t);
+  const beatPosition = (t - (g.buffer ? g.offset : 0)) / g.beat;
+
+  for (let player = 0; player < count; player++) {
+    const row = Math.floor(player / columns);
+    const rowCount = Math.min(columns, count - row * columns);
+    const x = area.x + area.w / 2 + (player % columns - (rowCount - 1) / 2) * spacing;
+    const y = area.y + (row + .5) * cellH - labelSpace / 2 + .045 * size;
+    const accent = colors[player];
+    drawDancer(ctx, {x, y, size, player, accent, ...pose, beatPosition, points: g.points});
+    if (count > 1) {
+      const labelY = y + 1.15 * size + labelSpace / 2;
+      ctx.fillStyle = '#30223f';
+      ctx.beginPath();
+      ctx.ellipse(x, labelY, labelSize * 1.4, labelSize * .76, 0, 0, 2 * Math.PI);
+      ctx.fill();
+      text(ctx, 'P' + (player + 1), x, labelY, labelSize, accent, 'center', 800);
+    }
   }
-  limb([-.04, .08], [0, -.17], [0, -.38], edge, '#b49bef');
-  limb([-.19, -.36], [0, -.32], [.19, -.36], edge, '#b49bef');
-  for (let i = 0; i < 2; i++) {
-    const side = sides[i], hand = pose.hands[i];
-    const elbow = [side * (.32 + .38 * Math.abs(hand[0])), (hand[1] - .36) / 2 + .14];
-    limb([side * .19, -.36], elbow, hand, edge, limbColor[i]);
-    joint(hand, .12 + pulse * .018, '#fe9ad5');
-    joint(hand, .067, '#ffe6f3');
-  }
-  joint([0, -.64], .205, edge);
-  joint([0, -.65], .17, '#ffe5c1');
-  ctx.beginPath();
-  ctx.arc(-.022, -.68, .158, Math.PI, Math.PI * 2.04);
-  ctx.fillStyle = '#8161c6';
-  ctx.fill();
-  ctx.restore();
 }
 
 function draw(ctx, {w, h}) {
@@ -556,6 +563,11 @@ function draw(ctx, {w, h}) {
   const pad = Math.max(10, Math.min(w * .05, 34)), landscape = w > h * 1.28;
   const ink = '#f7effe', dim = '#cabbd8', pink = '#ffafd9', lime = '#c6fa69';
   const id = g.steps[Math.min(g.index, g.cueCount - 1) % g.steps.length], pose = poses[id];
+  const split = landscape && g.scores.length === 1;
+  const band = landscape && !split;
+  const stageTop = h * (split ? .045 : band ? .215 : .208);
+  const stageBottom = h * (landscape ? .775 : .657);
+  const area = {x: pad, y: stageTop, w: (split ? w * .565 : w) - 2 * pad, h: stageBottom - stageTop};
   ctx.save();
   const bg = ctx.createLinearGradient(0, 0, w, h);
   bg.addColorStop(0, '#271d42');
@@ -563,7 +575,7 @@ function draw(ctx, {w, h}) {
   bg.addColorStop(1, '#271b3b');
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, w, h);
-  const dancerX = landscape ? w * .31 : w / 2, dancerY = landscape ? h * .45 : h * .43;
+  const dancerX = area.x + area.w / 2, dancerY = area.y + area.h / 2;
   const size = Math.min(landscape ? w * .162 : w * .29, h * (landscape ? .29 : .199));
   const light = ctx.createRadialGradient(dancerX, dancerY, 1, dancerX, dancerY, size * 1.75);
   light.addColorStop(0, 'rgba(237,153,241,.30)');
@@ -589,21 +601,22 @@ function draw(ctx, {w, h}) {
     ctx.lineTo(w, y);
   }
   ctx.stroke();
-  drawDancer(ctx, pose, g.points, dancerX, dancerY, size, glow);
+  drawCast(ctx, g, t, area);
 
-  const end = g.index >= g.cueCount, headingX = landscape ? w * .59 : w / 2;
-  const headingY = landscape ? h * .305 : h * .153, align = landscape ? 'left' : 'center';
-  const titleSize = Math.max(17, Math.min(w * (landscape ? .053 : .084), h * (landscape ? .119 : .065), 47));
+  const end = g.index >= g.cueCount, headingX = split ? w * .59 : band ? pad : w / 2;
+  const headingY = h * (split ? .305 : band ? .145 : .153), align = landscape ? 'left' : 'center';
+  const titleSize = Math.max(17, Math.min(w * (landscape ? .053 : .084), h * (split ? .119 : band ? .083 : .065), 47));
   const cap = Math.max(11, Math.min(15, w * .032, h * .056));
   text(ctx, end ? '完成编舞' : '第 ' + (g.index + 1) + ' / ' + g.cueCount + ' 步',
     headingX, headingY - titleSize * .97, cap, lime, align);
   text(ctx, pose.name, headingX, headingY, titleSize, ink, align, 800);
-  const hintY = landscape ? headingY + titleSize * 1.07 : h * .68;
+  const hintX = band ? w * .46 : headingX;
+  const hintY = split ? headingY + titleSize * 1.07 : band ? h * .075 : h * .69;
   const hint = g.points === 4 && pose.four ? pose.four : pose.two;
-  text(ctx, hint, headingX, hintY, Math.max(11, Math.min(18, w * .037, h * .06)), ink, align);
+  text(ctx, hint, hintX, hintY, Math.max(11, Math.min(18, w * .037, h * .06)), ink, align);
   const nextId = g.steps[(g.index + 1) % g.steps.length];
   if (!end && g.index + 1 < g.cueCount) {
-    text(ctx, '下一步  ' + poses[nextId].name, headingX, hintY + cap * 1.7, cap, dim, align);
+    text(ctx, '下一步  ' + poses[nextId].name, hintX, hintY + cap * 1.7, cap, dim, align);
   }
 
   // The moving note reaches the fixed target on the scoring beat.

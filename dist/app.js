@@ -120,6 +120,7 @@ function cameraCount(players) {
 }
 async function begin(requestMode) {
   closeRound(); mode = requestMode; game = games[chosen].game;
+  stage.dataset.game = games[chosen].id;
   const token = revision;
   if (game === danceGame) danceGame.unlockAudio();
   if (panel.open) panel.close();

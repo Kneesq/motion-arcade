@@ -881,6 +881,18 @@ dialog::backdrop {
   height: auto;
 }
 
+#stage[data-game=dance]:not(.calibrating) #camera-box {
+  top: 8px;
+  right: 8px;
+  bottom: auto;
+  width: min(16vw, 19vh, 94px);
+}
+
+#stage[data-game=dance]:not(.calibrating) #camera {
+  max-height: 13vh;
+  object-fit: contain;
+}
+
 #camera-count {
   display: block;
   text-align: center;
