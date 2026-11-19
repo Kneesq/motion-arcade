@@ -1,4 +1,5 @@
 import {drawDancer} from './dancers.js';
+import {panel} from './canvas-shapes.js';
 import {dynamicMoves, sampleDanceMove, drawDanceMotionCue} from './dance-moves.js';
 import {createDanceMotionTracker} from './dance-motion.js';
 
@@ -600,19 +601,15 @@ function drawCast(ctx, g, t, area) {
   }
 }
 
-function draw(ctx, {w, h}) {
-  const g = game;
-  if (!g || !w || !h) return;
-  const t = tickTime(g), progress = t / g.duration, phase = (t / g.beat) % 1, glow = (1 - phase) ** 3;
-  const pad = Math.max(10, Math.min(w * .05, 34)), landscape = w > h * 1.28;
-  const ink = '#f7effe', dim = '#cabbd8', pink = '#ffafd9', lime = '#c6fa69';
-  const id = g.steps[Math.min(g.index, g.cueCount - 1) % g.steps.length], pose = poses[id];
+const ink = '#f7effe', dim = '#cabbd8', pink = '#ffafd9', lime = '#c6fa69';
+
+function drawStudioCue(ctx, g, t, w, h, pad, pose, step, hint, next) {
+  const landscape = w > h * 1.28;
   const split = landscape && g.scores.length === 1;
   const band = landscape && !split;
   const stageTop = h * (split ? .045 : band ? .215 : .208);
   const stageBottom = h * (landscape ? .775 : .657);
   const area = {x: pad, y: stageTop, w: (split ? w * .565 : w) - 2 * pad, h: stageBottom - stageTop};
-  ctx.save();
   const bg = ctx.createLinearGradient(0, 0, w, h);
   bg.addColorStop(0, '#271d42');
   bg.addColorStop(.57, '#553462');
@@ -647,30 +644,65 @@ function draw(ctx, {w, h}) {
   ctx.stroke();
   drawCast(ctx, g, t, area);
 
-  const end = g.index >= g.cueCount, headingX = split ? w * .59 : band ? pad : w / 2;
+  const headingX = split ? w * .59 : band ? pad : w / 2;
   const headingY = h * (split ? .305 : band ? .145 : .153), align = landscape ? 'left' : 'center';
   const titleSize = Math.max(17, Math.min(w * (landscape ? .053 : .084), h * (split ? .119 : band ? .083 : .065), 47));
   const cap = Math.max(11, Math.min(15, w * .032, h * .056));
-  text(ctx, end ? '完成编舞' : '第 ' + (g.index + 1) + ' / ' + g.cueCount + ' 步',
-    headingX, headingY - titleSize * .97, cap, lime, align);
+  text(ctx, step, headingX, headingY - titleSize * .97, cap, lime, align);
   text(ctx, pose.name, headingX, headingY, titleSize, ink, align, 800);
   const hintX = band ? w * .46 : headingX;
   const hintY = split ? headingY + titleSize * 1.07 : band ? h * .075 : h * .69;
-  const hint = g.points === 4 && pose.four ? pose.four : pose.two;
   const hintWidth = landscape ? w - hintX - pad : w - 2 * pad;
   text(ctx, hint, hintX, hintY, Math.max(11, Math.min(18, w * .037, h * .06)), ink, align, 650, hintWidth);
-  const nextId = g.steps[(g.index + 1) % g.steps.length];
-  if (!end && g.index + 1 < g.cueCount) {
-    text(ctx, '下一步  ' + poses[nextId].name, hintX, hintY + cap * 1.7, cap, dim, align);
+  if (next) text(ctx, next, hintX, hintY + cap * 1.7, cap, dim, align);
+}
+
+function drawCameraCue(ctx, g, t, w, h, pose, step, hint, next) {
+  // Keep the middle of the live image clear, including in a four-person dance.
+  const count = g.scores.length, inset = clamp(Math.min(w, h) * .022, 5, 14);
+  const width = Math.min(w - inset * 2, 258 + 58 * count);
+  const height = clamp(h * .23, 66, 122);
+  const x = inset, y = inset, textX = x + inset;
+  const guideWidth = Math.min(width * (count > 2 ? .51 : .45), count * height);
+  const textWidth = width - guideWidth - 2 * inset;
+  ctx.lineWidth = 1;
+  panel(ctx, x, y, width - guideWidth, height, 13, 'rgba(38,26,52,.82)', '#eed6ff70');
+  drawCast(ctx, g, t, {x:x + width - guideWidth, y:y + 3, w:guideWidth - 4, h:height - 6});
+  const small = clamp(height * .125, 10, 14);
+  text(ctx, step, textX, y + height * .13, small, lime, 'left', 700, textWidth);
+  text(ctx, pose.name, textX, y + height * .35, clamp(height * .24, 17, 25), ink, 'left', 800, textWidth);
+  const lines = hint.split('，');
+  lines.forEach((line, i) => {
+    text(ctx, line, textX, y + height * (.57 + i * .145), small, ink, 'left', 650, textWidth);
+  });
+  if (next) text(ctx, next, textX, y + height * .90, small, dim, 'left', 650, textWidth);
+}
+
+function draw(ctx, {w, h, cameraVisible}) {
+  const g = game;
+  if (!g || !w || !h) return;
+  const t = tickTime(g), progress = t / g.duration, phase = (t / g.beat) % 1, glow = (1 - phase) ** 3;
+  const pad = Math.max(10, Math.min(w * .05, 34));
+  const pose = poses[g.steps[Math.min(g.index, g.cueCount - 1) % g.steps.length]];
+  const hint = g.points === 4 && pose.four ? pose.four : pose.two;
+  const end = g.index >= g.cueCount, step = end ? '完成编舞' : '第 ' + (g.index + 1) + ' / ' + g.cueCount + ' 步';
+  const next = g.index + 1 < g.cueCount ? '下一步  ' + poses[g.steps[(g.index + 1) % g.steps.length]].name : '';
+  const footer = clamp(h * .14, 37, 68);
+  ctx.save();
+  if (cameraVisible) {
+    drawCameraCue(ctx, g, t, w, h, pose, step, hint, next);
+    panel(ctx, pad / 2, h - footer, w - pad, footer - 6, 12, 'rgba(38,26,52,.85)');
+  } else {
+    drawStudioCue(ctx, g, t, w, h, pad, pose, step, hint, next);
   }
 
   // The moving note reaches the fixed target on the scoring beat.
-  const x1 = pad, x2 = w - pad, laneY = h * .826;
+  const x1 = pad, x2 = w - pad, laneY = cameraVisible ? h - footer * .69 : h * .826;
   const targetX = x1 + (x2 - x1) * .18;
   ctx.lineWidth = 2;
   ctx.strokeStyle = '#9875a2';
   ctx.beginPath(); ctx.moveTo(x1, laneY); ctx.lineTo(x2, laneY); ctx.stroke();
-  const noteR = Math.min(11, h * .032);
+  const noteR = cameraVisible ? footer * .115 : Math.min(11, h * .032);
   ctx.beginPath(); ctx.arc(targetX, laneY, noteR + 3 + 2 * glow, 0, 2 * Math.PI);
   ctx.strokeStyle = lime; ctx.lineWidth = 3; ctx.stroke();
   if (!end) {
@@ -684,7 +716,7 @@ function draw(ctx, {w, h}) {
   }
   const unit = (w - pad * 2) / g.scores.length;
   g.scores.forEach((score, i) => {
-    const x = pad + unit * (i + .5), y = h * .932, recent = t - g.feedbackAt[i] < 1;
+    const x = pad + unit * (i + .5), y = cameraVisible ? h - footer * .30 : h * .932, recent = t - g.feedbackAt[i] < 1;
     const message = recent ? g.feedback[i] : score + ' 分';
     text(ctx, 'P' + (i + 1) + '  ' + message, x, y, Math.min(16, Math.max(10, unit / 6.8), h * .052), colors[i]);
   });

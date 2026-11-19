@@ -54,8 +54,8 @@
     <footer><span><svg><use href="#i-pad"/></svg> Motion Arcade</span><button data-dialog="guide">相机使用说明</button></footer>
   </div>
   <section id="stage" hidden aria-label="游戏画面">
-    <div class="gamebar"><button id="exit-game"><svg><use href="#i-left"/></svg>大厅</button><strong id="stage-title"></strong><div class="gamebar-tools"><span id="session-mode"></span><button data-dialog="cast" aria-label="投屏到电视"><svg><use href="#i-cast"/></svg></button><button id="fullscreen" aria-label="全屏"><svg><use href="#i-max"/></svg></button><button id="pause" aria-label="暂停"><svg><use href="#i-pause"/></svg></button></div></div>
-    <div class="surface"><canvas id="screen" aria-label="体感游戏场景"></canvas><div id="camera-box" hidden><video id="camera" muted autoplay playsinline></video><small id="camera-count"></small></div></div>
+    <div class="gamebar"><button id="exit-game"><svg><use href="#i-left"/></svg>大厅</button><strong id="stage-title"></strong><div class="gamebar-tools"><span id="session-mode">触控试玩</span><small id="camera-count" hidden></small><button data-dialog="cast" aria-label="投屏到电视"><svg><use href="#i-cast"/></svg></button><button id="fullscreen" aria-label="全屏"><svg><use href="#i-max"/></svg></button><button id="pause" aria-label="暂停"><svg><use href="#i-pause"/></svg></button></div></div>
+    <div class="surface"><div id="playfield"><video id="camera" muted autoplay playsinline disablepictureinpicture aria-label="实时相机画面" hidden></video><canvas id="screen" aria-label="体感游戏场景"></canvas></div></div>
     <div id="controls" hidden></div>
     <div class="overlay" id="intermission" hidden><div class="overlay-card"><h2 id="inter-title"></h2><p id="inter-desc" aria-live="polite"></p><div id="scores"></div><div id="inter-actions"></div></div></div>
   </section>
@@ -67,7 +67,7 @@
       <fieldset><legend>动作侦测</legend><div class="segments" data-opt="points"><button data-value="2">双手 · 2 点</button><button data-value="4">双手双脚 · 4 点</button></div></fieldset>
       <div id="game-options"></div>
       <div id="dance-editor-wrap" hidden><div id="dance-editor"></div></div>
-      <p class="privacy"><svg><use href="#i-camera"/></svg>画面只在本机处理。请让所有玩家完整入镜。</p>
+      <p class="privacy"><svg><use href="#i-camera"/></svg>相机画面就是游戏背景。请让所有玩家完整入镜，影像只在本机处理。</p>
       <div class="setup-actions"><button class="primary" id="camera-start"><svg><use href="#i-camera"/></svg>开启相机游玩</button><button class="secondary" id="demo-start">触控试玩</button></div>
     </div>
     <div id="info-content" hidden></div>
