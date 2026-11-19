@@ -1,5 +1,9 @@
 # Motion Arcade 动感街机
 
+## [▶ 开始游戏](https://kneesq.github.io/motion-arcade/)
+
+在手机 GitHub App 点上面的「▶ 开始游戏」即可进入游戏大厅。选好人数和镜头后，点「开启相机游玩」。如果 App 内网页无法请求相机，可从页面菜单选择用 Safari 或 Chrome 打开。
+
 这是一个原生 HTML、CSS 和 JavaScript 游戏厅。三个游戏共用手机的镜头、玩家设置和本地姿态识别模型。整包是静态网页，可以直接交给静态网站服务器，无需编译或安装前端依赖。
 
 ## 手机上打开
