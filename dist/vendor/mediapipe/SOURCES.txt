@@ -1,0 +1,10 @@
+MediaPipe Tasks Vision 0.10.21
+https://www.npmjs.com/package/@mediapipe/tasks-vision/v/0.10.21
+The original vision_bundle.mjs and wasm/ files are distributed with this game.
+The accompanying LICENSE is from the MediaPipe v0.10.21 source release.
+https://github.com/google-ai-edge/mediapipe/tree/v0.10.21
+
+Google MediaPipe Pose Landmarker Lite, float16, version 1
+https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task
+SHA-256: 59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a
+Model documentation: https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker

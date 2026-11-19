@@ -1,0 +1,101 @@
+.dance-editor {
+  --de-ink: #22312b;
+  --de-muted: #565e50;
+  --de-paper: #fffdf5;
+  --de-line: #cbd0c0;
+  --de-accent: #d8f882;
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  color: var(--de-ink);
+  font: inherit;
+  text-align: left;
+}
+.dance-editor[hidden], .dance-editor [hidden] { display: none !important; }
+.dance-editor *, .dance-editor *::before, .dance-editor *::after { box-sizing: border-box; }
+.dance-editor .de-heading, .dance-editor .de-source, .dance-editor .de-arrange {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.dance-editor .de-heading { justify-content: space-between; gap: 6px 12px; }
+.dance-editor .de-heading h3 { margin: 0; font: inherit; font-size: 1.03rem; font-weight: 760; color: var(--de-ink); }
+.dance-editor .de-song { color: var(--de-muted); font-size: .91rem; overflow-wrap: anywhere; }
+.dance-editor .de-source { margin-top: 8px; }
+.dance-editor button, .dance-editor .de-upload {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 38px;
+  padding: 6px 12px;
+  background: var(--de-paper);
+  border: 1px solid var(--de-line);
+  border-radius: 9px;
+  color: var(--de-ink);
+  font: inherit;
+  line-height: 1.32;
+  font-size: .9rem;
+  font-weight: 620;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.dance-editor .de-upload { background: var(--de-ink); color: white; border-color: var(--de-ink); overflow: hidden; }
+.dance-editor .de-upload input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.dance-editor button:disabled { opacity: .45; cursor: default; }
+.dance-editor .de-upload:focus-within, .dance-editor :is(button, input, select):focus-visible {
+  outline: 2px solid #6b3d91;
+  outline-offset: 2px;
+}
+.dance-editor .de-preview { display: block; width: 100%; max-width: 480px; height: 40px; margin-top: 10px; }
+.dance-editor .de-notice, .dance-editor .de-hint { margin: 0; color: var(--de-muted); font-size: .9rem; line-height: 1.5; }
+.dance-editor .de-notice:not(:empty) { margin-top: 6px; }
+.dance-editor .de-timing { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 9px; padding-block: 12px; border-block: 1px solid var(--de-line); }
+.dance-editor .de-timing label { display: grid; gap: 6px; margin: 0; color: var(--de-muted); font-size: .88rem; font-weight: 620; }
+.dance-editor .de-timing input, .dance-editor .de-timing select {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 5px 9px;
+  border: 1px solid var(--de-line);
+  border-radius: 8px;
+  background-color: var(--de-paper);
+  color: var(--de-ink);
+  font: inherit;
+  font-size: 1rem;
+}
+.dance-editor .de-timing select {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 49%, var(--de-ink) 51%), linear-gradient(-45deg, transparent 49%, var(--de-ink) 51%);
+  background-repeat: no-repeat;
+  background-size: 5px 5px;
+  background-position: calc(100% - 15px) 52%, calc(100% - 10px) 52%;
+  padding-right: 21px;
+}
+.dance-editor .de-random { background-color: var(--de-accent); border-color: #9cb664; }
+.dance-editor .de-hint { margin-top: -7px; }
+.dance-editor .de-steps {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 3px 2px 8px;
+  scrollbar-width: thin;
+  scrollbar-color: #aeb9a0 transparent;
+}
+.dance-editor .de-steps button { flex: none; }
+.dance-editor .de-steps [aria-pressed="true"] { background: var(--de-ink); border-color: var(--de-ink); color: white; }
+.dance-editor .de-arrange { margin-top: -7px; }
+.dance-editor .de-arrange button { background: transparent; font-weight: 550; }
+.dance-editor .de-bank { display: grid; grid-template-columns: repeat(auto-fit, minmax(78px,1fr)); gap: 6px; }
+.dance-editor .de-bank button { white-space: nowrap; padding-inline: 6px; font-weight: 550; }
+.dance-editor .de-bank [aria-pressed="true"] { border-color: var(--de-ink); background: var(--de-accent); }
+@media (max-width: 460px) {
+  .dance-editor { gap: 12px; }
+  .dance-editor .de-bank { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .dance-editor .de-timing { gap: 5px; }
+  .dance-editor .de-arrange { gap: 5px; }
+  .dance-editor .de-arrange button { min-height: 38px; padding-inline: 9px; }
+}
