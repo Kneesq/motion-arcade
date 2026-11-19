@@ -1,13 +1,15 @@
 import {MotionTracker} from './tracker.js';
-import {balloonGame, runnerGame} from './arcade.js';
+import {balloonGame, balloonPalette} from './arcade.js';
+import {runnerGame} from './runner.js';
+import {mountGameOptions} from './game-options.js';
 import {danceGame, mountDanceEditor} from './dance.js';
 
 const $ = id => document.getElementById(id);
 const icon = name => '<svg aria-hidden="true"><use href="#i-' + name + '"/></svg>';
 const games = [
-  {id:'balloon', title:'气球爆破', en:'BALLOON POP', tag:'反应挑战', detail:'挥动双手，戳破迎面飘来的缤纷气球！', short:'瞄准缤纷气球，看看谁的反应最快。', meta:'动作捕捉', game:balloonGame},
+  {id:'balloon', title:'气球爆破', en:'BALLOON POP', tag:'反应挑战', detail:'挥动双手，戳破从天而降的气球和泡泡！', short:'戳破气球与泡泡，多人还可挑战专属颜色。', meta:'动作捕捉', game:balloonGame},
   {id:'dance', title:'节拍舞台', en:'BEAT STUDIO', tag:'音乐节奏', detail:'上传喜欢的歌，编排属于你的十种舞步。', short:'上传你的音乐，自由组合专属舞步。', meta:'自由编舞', game:danceGame},
-  {id:'runner', title:'冒险跑酷', en:'RUSH RUN', tag:'冒险闯关', detail:'跳跃、闪身、下蹲，穿过眼前的重重障碍！', short:'穿越不同场景，用身体躲开障碍。', meta:'第一视角', game:runnerGame}
+  {id:'runner', title:'冒险跑酷', en:'RUSH RUN', tag:'冒险闯关', detail:'穿过童话跑道，收集一路的星星和金币！', short:'一起收集星星与金币，或双人分屏竞赛。', meta:'第一视角', game:runnerGame}
 ];
 const actions = {left:'向左',right:'向右',jump:'跳跃',duck:'下蹲',hit:'跟拍'};
 const palette = ['#d5f75a','#ffb094','#9adfff','#dabaff'];
@@ -20,9 +22,11 @@ try {
 } catch {}
 const panel = $('panel'), stage = $('stage'), canvas = $('screen'), ctx = canvas.getContext('2d');
 const tracker = new MotionTracker($('camera'));
+const gameOptions = mountGameOptions($('game-options'));
 let featured = 0, chosen = 0, phase = 'lobby', mode = 'demo', revision = 0;
 let raf = 0, lastTime = 0, elapsed = 0, loseSince = 0, readySince = 0, demoPlayer = 0;
 let game = games[0].game;
+let roundOptions, markerPalette = palette;
 let editorMounted = false;
 const img = g => 'assets/' + g.id + '.webp';
 function button(text, action, primary = false) {
@@ -60,6 +64,7 @@ panel.addEventListener('close',() => {
   $('dance-editor').querySelectorAll('audio').forEach(a => a.pause());
 });
 function renderPrefs() {
+  gameOptions.render(games[chosen].id, prefs.players);
   document.querySelectorAll('[data-opt]').forEach(group => {
     group.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed',String(prefs[group.dataset.opt]) === b.dataset.value));
   });
@@ -82,7 +87,7 @@ function openSetup(index) {
   $('chosen-game').innerHTML = '<img alt="" src="' + img(g) + '"><span>' + g.title + '<small>' + g.en + '</small></span>';
   renderPrefs(); showPanel('游玩设置', true); panel.scrollTop = 0;
 }
-const guide = '<p class="intro">把手机放稳，让镜头同时看到所有玩家。横屏游玩时，左右移动的空间更大。</p><section class="info-block"><h3>选择人数和镜头</h3><p>可选 1 至 4 人、前置或后置镜头。面向镜头并肩站好，保持双手、双脚可见，站直片刻完成定位。</p></section><section class="info-block"><h3>选择侦测点</h3><p>双手模式用左右手玩游戏，四点模式加入两只脚。跑酷会同时参考身体中心，识别跳跃、下蹲和侧移。</p></section><section class="info-block"><h3>开始游玩</h3><p>戳碰气球可以得分。舞蹈按节拍模仿动作，可在设置里选歌和编舞。跑酷跟随提示避开障碍。触控试玩可以直接点按画面或操作按钮。</p></section><section class="info-block"><h3>相机权限</h3><p>用 Safari 或 Chrome 打开 HTTPS 游戏网址，并在浏览器提示时允许相机。画面在手机本机分析，返回大厅后镜头会关闭。</p></section>';
+const guide = '<p class="intro">把手机放稳，让镜头同时看到所有玩家。横屏游玩时，左右移动的空间更大。</p><section class="info-block"><h3>选择人数和镜头</h3><p>可选 1 至 4 人、前置或后置镜头。面向镜头并肩站好，保持双手、双脚可见，站直片刻完成定位。</p></section><section class="info-block"><h3>选择侦测点</h3><p>双手模式用左右手玩游戏，四点模式加入两只脚。跑酷会同时参考身体中心，识别跳跃、下蹲和侧移。</p></section><section class="info-block"><h3>开始游玩</h3><p>气球或透明泡泡会从上方落下。多人可选「指定颜色」，碰对加 10 分，碰错扣 5 分。舞蹈可选歌编舞，跟随自己的小舞者做动作。跑酷可以躲障碍、收集金币和星星，双人可选合作闯关或分屏对战。</p></section><section class="info-block"><h3>相机权限</h3><p>用 Safari 或 Chrome 打开 HTTPS 游戏网址，并在浏览器提示时允许相机。画面在手机本机分析，返回大厅后镜头会关闭。</p></section>';
 const cast = '<p class="intro">手机负责识别动作，电视同步显示整场游戏。先让手机和电视连接同一个 Wi-Fi。</p><section class="info-block"><h3>iPhone · AirPlay</h3><p>打开控制中心，点「屏幕镜像」，选择 Apple TV 或支持 AirPlay 的电视，再回到游戏横屏游玩。</p><a href="https://support.apple.com/zh-cn/102661" target="_blank" rel="noopener">Apple 屏幕镜像说明</a></section><section class="info-block"><h3>Android · Google Cast</h3><p>打开 Google Home，长按支持 Google Cast 的电视或 Chromecast，选择投放屏幕。若系统询问分享范围，选择整个屏幕或正在玩的浏览器，再回到 Chrome。</p><a href="https://support.google.com/googlecast/answer/6059461?hl=zh-Hans" target="_blank" rel="noopener">Google 投屏说明</a></section>';
 document.querySelectorAll('[data-dialog]').forEach(b => b.onclick = () => {
   if (phase === 'playing') pause('游戏已暂停');
@@ -115,12 +120,19 @@ function fail(error) {
 }
 function ready(players) { return players.length === prefs.players && players.every(p => p.calibrated); }
 function cameraCount(players) {
-  const label = '已识别 ' + players.length + ' / ' + prefs.players + ' 人';
+  const count = players.length + ' / ' + prefs.players;
+  const compact = stage.classList.contains('race-camera') && !stage.classList.contains('calibrating');
+  const label = compact ? count : '已识别 ' + count + ' 人';
   if ($('camera-count').textContent !== label) $('camera-count').textContent = label;
 }
 async function begin(requestMode) {
   closeRound(); mode = requestMode; game = games[chosen].game;
+  roundOptions = gameOptions.values();
+  markerPalette = roundOptions.colorChallenge
+    ? roundOptions.playerColors.map((key, id) => balloonPalette.find(c => c.key === key)?.color || palette[id])
+    : palette;
   stage.dataset.game = games[chosen].id;
+  stage.classList.toggle('race-camera', mode === 'camera' && roundOptions.runnerMode === 'versus');
   const token = revision;
   if (game === danceGame) danceGame.unlockAudio();
   if (panel.open) panel.close();
@@ -156,7 +168,7 @@ async function startRound(token) {
   phase = 'starting'; stage.classList.remove('calibrating');
   overlay('正在开始',games[chosen].title);
   try {
-    await game.start({...prefs,mode,onFinish:(scores,details) => {if (revision === token) finish(scores,details);}});
+    await game.start({...prefs,...roundOptions,mode,onFinish:(scores,details) => {if (revision === token) finish(scores,details);}});
     if (revision !== token) return;
     phase = 'playing'; lastTime = 0; elapsed = 0; $('pause').disabled = false;
     $('intermission').hidden = true;
@@ -167,12 +179,23 @@ async function startRound(token) {
 }
 function finish(scores,details) {
   closeRound(); phase = 'finished'; $('pause').disabled = true;
-  const title = details?.completed === false ? '本关未通过' : details?.completed ? '全程通关！' : '本局结束！';
-  const result = details?.stageName ? details.stageName + ' · 已通过 ' + details.cleared + ' 个障碍' : games[chosen].title;
+  let title = details?.completed === false ? '本关未通过' : details?.completed ? '全程通关！' : '本局结束！';
+  let result = details?.stageName ? details.stageName + ' · 本关通过 ' + details.cleared + ' 个障碍' : games[chosen].title;
+  if (details?.mode === 'versus') {
+    title = details.winner == null ? '两位玩家平局！' : '玩家 ' + (details.winner + 1) + ' 获胜！';
+    result = '双人分屏竞赛结束';
+  }
   overlay(title,result,[button('再玩一局',() => begin(mode),true),button('返回大厅',lobby)]);
   scores.forEach((s,id) => {
     const row = document.createElement('div'); row.className = 'score-row';
-    row.innerHTML = '<b>玩家 ' + (id + 1) + '</b><span>' + Number(s) + ' 分</span>'; $('scores').append(row);
+    row.innerHTML = '<b>玩家 ' + (id + 1) + '</b><span>' + Number(s) + ' 分</span>';
+    const stats = details?.stats?.[id];
+    if (stats) {
+      const items = document.createElement('small');
+      items.textContent = '金币 ' + stats.coins + ' · 星星 ' + stats.stars;
+      row.append(items);
+    }
+    $('scores').append(row);
   });
 }
 function markers(players,w,h) {
@@ -181,7 +204,7 @@ function markers(players,w,h) {
   for (const p of players) for (const key of limbs) {
     const point = p[key]; if (!point || point.score < .45) continue;
     const x = point.x * w, y = point.y * h, radius = Math.max(8,Math.min(14,Math.min(w,h)*.024));
-    ctx.fillStyle = palette[p.id]; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+    ctx.fillStyle = markerPalette[p.id]; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(x,y,radius,0,Math.PI*2); ctx.fill(); ctx.stroke();
     ctx.fillStyle = '#19282a'; ctx.font = 'bold ' + radius + 'px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(p.id + 1,x,y);
   }
@@ -235,7 +258,23 @@ $('fullscreen').onclick = async () => {
 };
 function buildControls() {
   const root = $('controls'); root.replaceChildren(); root.hidden = true;
+  const race = roundOptions.runnerMode === 'versus';
+  root.classList.toggle('split-controls', race);
   if (mode !== 'demo') return;
+  if (race) {
+    for (let id = 0; id < 2; id++) {
+      const group = document.createElement('div'); group.className = 'race-pad';
+      const label = document.createElement('strong'); label.textContent = 'P' + (id + 1);
+      group.append(label);
+      for (const name of ['left','jump','duck','right']) {
+        const control = button(actions[name], () => input(name, id));
+        control.setAttribute('aria-label', '玩家 ' + (id + 1) + ' ' + actions[name]);
+        group.append(control);
+      }
+      root.append(group);
+    }
+    return;
+  }
   if (prefs.players > 1) {
     const picker = document.createElement('select'); picker.setAttribute('aria-label','控制玩家');
     for (let i = 0; i < prefs.players; i++) picker.add(new Option('玩家 ' + (i+1),String(i)));
@@ -244,8 +283,8 @@ function buildControls() {
   const names = game === runnerGame ? ['left','jump','duck','right'] : game === danceGame ? ['hit'] : [];
   for (const a of names) root.append(button(actions[a],() => input(a)));
 }
-function input(a) {
-  if (phase === 'playing' && mode === 'demo') game.action?.(demoPlayer,a);
+function input(a, player = demoPlayer) {
+  if (phase === 'playing' && mode === 'demo') game.action?.(player,a);
 }
 canvas.addEventListener('pointerdown',e => {
   if (phase !== 'playing' || mode !== 'demo') return;
@@ -255,6 +294,11 @@ canvas.addEventListener('pointerdown',e => {
 });
 window.addEventListener('keydown',e => {
   if (phase !== 'playing' || panel.open || e.repeat || e.target.tagName === 'SELECT') return;
+  if (mode === 'demo' && roundOptions.runnerMode === 'versus') {
+    const p1 = {KeyA:'left',KeyW:'jump',KeyS:'duck',KeyD:'right'}[e.code];
+    const p2 = {ArrowLeft:'left',ArrowUp:'jump',ArrowDown:'duck',ArrowRight:'right'}[e.key];
+    if (p1 || p2) { e.preventDefault(); input(p1 || p2, p1 ? 0 : 1); return; }
+  }
   const a = {ArrowLeft:'left',ArrowRight:'right',ArrowUp:'jump',ArrowDown:'duck',' ':game === danceGame ? 'hit' : 'jump'}[e.key];
   if (a && mode === 'demo') {e.preventDefault(); input(a);}
   if (e.key === 'Escape') pause('游戏已暂停');

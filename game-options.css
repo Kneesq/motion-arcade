@@ -1,0 +1,44 @@
+.game-options .go-help {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.go-player-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px 12px;
+}
+
+.go-player {
+  display: grid;
+  grid-template-columns: 15px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 6px;
+  row-gap: 3px;
+}
+
+.go-player > span {
+  grid-column: 1 / -1;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.go-player > i {
+  border: 1px solid #31273d55;
+  border-radius: 50%;
+  width: 15px;
+  height: 15px;
+}
+
+.go-player select {
+  width: 100%;
+  min-height: 42px;
+  padding: 5px 8px;
+  border: 1px solid #d9d4e2;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 16px;
+}
