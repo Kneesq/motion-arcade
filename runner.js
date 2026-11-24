@@ -1,5 +1,5 @@
 import {polygon, ellipse, panel} from './canvas-shapes.js';
-import {scenes, createScenery, horizonScene, drawRoadside} from './runner-world.js';
+import {scenes, createScenery, horizonScene, drawRoadside, updateAmbientAnimals, drawAmbientAnimals} from './runner-world.js';
 
 // Camera gestures and touch input use the same player IDs and scoring windows.
 const ink = '#343044';
@@ -18,9 +18,10 @@ function label(ctx, value, x, y, size, color = ink, align = 'left', weight = 700
 }
 
 const actionLabels = {left:'向左移', right:'向右移', jump:'跳起来', duck:'蹲下来'};
+const envIndex = {sky:0, forest:1, ocean:2};
 const gateOrders = [
-  ['jump','left','duck','right','duck','right','jump','left','left','duck','right','jump'],
-  ['right','duck','left','jump','left','jump','right','duck','duck','right','jump','left']
+  ['jump','duck','jump','duck','duck','jump','jump','duck','duck','jump','duck','jump'],
+  ['duck','jump','duck','jump','jump','duck','duck','jump','jump','duck','jump','duck']
 ];
 const rounds = 12;
 let game;
@@ -30,8 +31,8 @@ function newPlayer(id) {
     moves:{left:-Infinity, right:-Infinity, jump:-Infinity, duck:-Infinity}};
 }
 
-function makeCourse(ids, variant) {
-  const course = {ids, variant, index:0, cleared:0, stage:0, scenery:createScenery(), done:false};
+function makeCourse(ids, variant, scene) {
+  const course = {ids, variant, scene, index:0, cleared:0, stage:0, scenery:createScenery(), done:false};
   nextEvents(course, 0);
   return course;
 }
@@ -40,14 +41,12 @@ function nextEvents(c, start) {
   const slot = c.index % 4;
   const timing = [0,.24,-.17,.08][(slot + 2*c.variant) % 4];
   c.stage = Math.floor(c.index / 4);
-  c.scene = (c.stage + c.variant) % scenes.length;
   c.start = start;
-  c.gateAt = start + 4.65 - .2*c.stage + timing;
+  c.gateAt = start + 4.55 - .18*c.stage + timing;
   c.pickAt = start + 2.02 + .12*c.variant + .45*timing;
   c.kind = gateOrders[c.variant][c.index];
   const star = (c.index + c.variant) % 2 === 1;
-  const right = (Math.floor(c.index / 2) + c.variant) % 2 === 1;
-  c.pick = {star, move:star ? 'jump' : right ? 'right' : 'left', lane:star ? 0 : right ? 1 : -1};
+  c.pick = {star, move:star ? 'jump' : null, lane:0};
   c.pickResult = null;
   c.gateResult = null;
 }
@@ -63,6 +62,7 @@ function lane(player, age) {
 }
 
 function matches(player, move, age) {
+  if (!move) return true;
   if (move === 'left') return lane(player,age) === -1;
   if (move === 'right') return lane(player,age) === 1;
   return active(player,move,age);
@@ -161,21 +161,27 @@ function starShape(ctx,x,y,r,fill,outline,angle=0) {
   polygon(ctx,vertices,fill,outline);
 }
 
-function projection(w,h,c,age,player,cameraVisible) {
-  const horizon=h*((cameraVisible ? .60 : .44)+Math.sin(age*8.5+c.variant)*.002);
-  const halfRoad=w*.71;
+function projection(w,h,c,age,player) {
+  const head=player?.head ?? 0;
+  const jumpAmt=Math.max(0,-head);
+  const duckAmt=Math.max(0,head);
+  const stride=age*9.2+c.variant*1.4;
+  const bobY=Math.sin(stride)*.042*(1-jumpAmt*.7);
+  const bobX=Math.cos(stride*.5)*.024*(1-jumpAmt*.5);
+  const horizon=h*(.43+jumpAmt*.055-duckAmt*.055+bobY*.16);
+  const halfRoad=w*.72;
   const bend=Math.sin(age*.32+c.variant*2.4)*w*.068;
-  const eyeHeight=1-(player?.head ?? 0)*.37;
+  const camY=1.0+bobY+jumpAmt*.65-duckAmt*.42;
   const lean=player?.lean ?? 0;
-  const project=(z,offset=0)=>{
+  const project=(z,offset=0,worldY=0)=>{
     const scale=1/(1+Math.max(-.42,z)*1.04);
     return {
-      x:w*.5+scale*halfRoad*(offset-lean*.64)+bend*(1-Math.min(1,scale))**2,
-      y:horizon+scale*(h-horizon)*1.09*eyeHeight,
+      x:w*.5+scale*halfRoad*(offset-lean*.64-bobX)+bend*(1-Math.min(1,scale))**2,
+      y:horizon+scale*(h-horizon)*1.09*(camY-worldY),
       scale
     };
   };
-  return {horizon,project,vanishingX:w*.5+bend};
+  return {horizon,project,vanishingX:w*.5+bend,camY,jumpAmt,duckAmt};
 }
 
 function band(ctx,project,a,b,left,right,color) {
@@ -183,9 +189,9 @@ function band(ctx,project,a,b,left,right,color) {
   polygon(ctx,[[p.x,p.y],[q.x,q.y],[r.x,r.y],[t.x,t.y]],color);
 }
 
-function road(ctx,w,h,c,age,view,cameraVisible) {
+function road(ctx,w,h,c,age,view) {
   const theme=scenes[c.scene],project=view.project;
-  const surface = cameraVisible ? theme.road.map(color => color+'28') : theme.road;
+  const surface=theme.road;
   const baseLeft=project(29,-1),baseRight=project(29,1);
   polygon(ctx,[[view.vanishingX,view.horizon],[baseRight.x,baseRight.y],[baseLeft.x,baseLeft.y]],surface[0]);
   const distance=age*(4.6+c.stage*.2)+c.variant*1.6;
@@ -202,6 +208,7 @@ function road(ctx,w,h,c,age,view,cameraVisible) {
     }
   }
   drawRoadside(ctx,w,h,c,age,view,distance);
+  drawAmbientAnimals(ctx,w,h,c,age,view);
 }
 
 function toyRail(ctx,x,y,w,h,theme) {
@@ -216,38 +223,49 @@ function toyRail(ctx,x,y,w,h,theme) {
 
 function gate(ctx,w,h,c,view,age) {
   const remain=c.gateAt-age;
-  if (remain<-.15) return;
-  const z=remain*2.25, unit=Math.min(w,h),theme=scenes[c.scene];
+  if (remain<-.18) return;
+  const z=remain*2.25, unit=Math.min(w,h), theme=scenes[c.scene];
   const bounds=c.kind==='left'?[-.30,.96]:c.kind==='right'?[-.96,.30]:[-.96,.96];
-  const l=view.project(z,bounds[0]),r=view.project(z,bounds[1]);
+  const topY=c.kind==='jump' ? .52 : 1.38;
+  const l=view.project(z,bounds[0],0), r=view.project(z,bounds[1],0);
+  const lt=view.project(z,bounds[0],topY);
   const scale=l.scale, width=r.x-l.x;
-  let height=unit*(c.kind==='jump' ? .19 : .44);
-  if(c.kind==='duck') height=Math.max(unit*.75,h*.54);
-  height*=scale;
-  const thickness=Math.max(2,unit*scale*(c.kind==='duck' ? .112 : .083));
+  const height=Math.max(4,l.y-lt.y);
+  const thickness=Math.max(3,unit*scale*(c.kind==='duck' ? .145 : .09));
   ellipse(ctx,(l.x+r.x)/2,l.y,width*.53,Math.max(.6,unit*.023*scale),'rgba(83,65,77,.2)');
-  for (const x of [l.x+thickness*.21,r.x-thickness*.65]) {
-    panel(ctx,x,l.y-height,thickness*.45,height,thickness*.2,theme.wood);
-    panel(ctx,x+thickness*.10,l.y-height*.85,thickness*.09,height*.76,thickness*.04,'#f3c9a1');
+  for (const x of [l.x+thickness*.16,r.x-thickness*.56]) {
+    panel(ctx,x,lt.y,thickness*.42,height,thickness*.18,theme.wood);
+    panel(ctx,x+thickness*.09,lt.y+height*.06,thickness*.09,height*.84,thickness*.04,'#f3c9a1');
   }
-  toyRail(ctx,l.x,l.y-height,width,thickness,theme);
-  if(c.kind==='left' || c.kind==='right') {
-    toyRail(ctx,l.x,l.y-height*.53,width,thickness*.8,theme);
-    const block=Math.min(height*.69,width*.31);
-    const center=(l.x+r.x)/2;
-    panel(ctx,center-block*.53,l.y-height*.87,block*1.06,block*.72,block*.13,'#ffe3b7',theme.wood);
-    smile(ctx,center,l.y-height*.87+block*.32,block*.64);
+  toyRail(ctx,l.x,lt.y,width,thickness,theme);
+  if (c.kind==='duck') {
+    const mid=view.project(z,0,.84);
+    const barH=Math.max(thickness,mid.y-lt.y);
+    toyRail(ctx,l.x,mid.y-thickness*.6,width,thickness*.95,theme);
+    const badgeW=Math.min(width*.36,barH*1.4);
+    const badgeH=Math.max(10,thickness*.95);
+    panel(ctx,(l.x+r.x-badgeW)*.5,lt.y+barH*.2,badgeW,badgeH,badgeH*.35,'#fff4cf',theme.wood);
+    label(ctx,'↓ 蹲下', (l.x+r.x)*.5, lt.y+barH*.2+badgeH*.5, Math.max(8,badgeH*.62), ink, 'center', 850);
+  } else if (c.kind==='jump') {
+    const mid=view.project(z,0,.26);
+    toyRail(ctx,l.x,mid.y,width,thickness*.75,theme);
+    const badgeW=Math.min(width*.32,height*.95);
+    const badgeH=Math.max(9,thickness*.85);
+    panel(ctx,(l.x+r.x-badgeW)*.5,lt.y-badgeH*.35,badgeW,badgeH,badgeH*.35,'#e9f9b8',theme.wood);
+    label(ctx,'↑ 跳起', (l.x+r.x)*.5, lt.y-badgeH*.35+badgeH*.5, Math.max(8,badgeH*.62), ink, 'center', 850);
   }
 }
 
 function pickup(ctx,w,h,c,view,age) {
   if(c.pickResult) return;
   const seconds=c.pickAt-age;
-  const point=view.project(seconds*1.82,c.pick.lane*.64);
+  const worldY=c.pick.star ? 1.05 : .38;
+  const ground=view.project(seconds*1.82,c.pick.lane*.64,0);
+  const point=view.project(seconds*1.82,c.pick.lane*.64,worldY);
   const radius=Math.min(w,h)*.13*point.scale;
-  const y=point.y-Math.min(w,h)*point.scale*(c.pick.star ? .63 : .27);
+  const y=point.y;
   const tilt=Math.sin(age*4.5)*.09;
-  ellipse(ctx,point.x,point.y,radius*.80,radius*.17,'rgba(114,80,63,.18)');
+  ellipse(ctx,ground.x,ground.y,radius*.80,radius*.17,'rgba(114,80,63,.18)');
   ctx.lineWidth=Math.max(1.1,radius*.085);
   if(c.pick.star) {
     starShape(ctx,point.x,y+radius*.10,radius*1.11,'#e6a54a','#ac703b',tilt);
@@ -309,16 +327,17 @@ function displayCue(c,age,versus,player) {
   const start=isPickup?c.start:c.pickAt+.69;
   const now=arrival-age<.64;
   let instruction;
-  if (isPickup) instruction=c.pick.star?'星星 · 回到路中央':'金币 · 移到金币一侧';
+  if (isPickup) instruction=c.pick.star?'前方星星 · 跳起来':'前方金币 · 跑过收集';
   else instruction='前方障碍';
   const move=isPickup?c.pick.move:c.kind;
   const timing=now?'现在':'准备';
-  const target=isPickup ? c.pick.star?'星星居中':'金币' : '障碍';
+  const actionText=move ? actionLabels[move] : '保持奔跑';
+  const target=isPickup ? c.pick.star?'星星':'金币' : '障碍';
   return {
-    message:timing+' · '+actionLabels[move],
-    shortText:target+' · '+timing+actionLabels[move],
+    message:move ? timing+' · '+actionText : actionText,
+    shortText:target+' · '+(move ? timing+actionText : actionText),
     instruction, progress:clamp((age-start)/(arrival-start),0,1),
-    color:now?'#e2f8a3':isPickup?'#fff0ba':paper
+    color:now && move?'#e2f8a3':isPickup?'#fff0ba':paper
   };
 }
 
@@ -391,16 +410,100 @@ function hud(ctx,w,h,c,s,player,cameraVisible) {
   drawScores(ctx,w,h,s,player?[player.id]:c.ids,cameraVisible);
 }
 
-function drawView(ctx,x,y,w,h,c,s,player,cameraVisible) {
-  const view=projection(w,h,c,s.age,player,cameraVisible);
+function speedLines(ctx, w, h, age, view) {
+  const boost = view.jumpAmt * 0.55 + view.duckAmt * 0.45;
+  const alpha = 0.08 + boost * 0.16;
+  ctx.save();
+  ctx.strokeStyle = `rgba(255, 253, 243, ${alpha.toFixed(3)})`;
+  ctx.lineCap = 'round';
+  const cx = view.vanishingX, cy = view.horizon;
+  for (let i = 0; i < 10; i++) {
+    const angle = (i < 5 ? -0.36 + i * 0.18 : Math.PI - 0.36 + (i - 5) * 0.18) + Math.sin(i * 3.1) * 0.05;
+    const cycle = (age * (2.6 + boost * 1.8) + i * 0.37) % 1;
+    const r0 = Math.max(w, h) * (0.28 + cycle * 0.36);
+    const r1 = r0 + Math.max(w, h) * (0.06 + boost * 0.08);
+    ctx.lineWidth = Math.max(1.2, Math.min(w, h) * 0.004 * (0.6 + cycle));
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(angle) * r0, cy + Math.sin(angle) * r0);
+    ctx.lineTo(cx + Math.cos(angle) * r1, cy + Math.sin(angle) * r1);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawRunner(ctx, w, h, c, age, view, player, slotOffset = 0, showTag = false) {
+  const runnerZ = 0.42;
+  const lean = player?.lean ?? 0;
+  const head = player?.head ?? 0;
+  const jumpAmt = Math.max(0, -head);
+  const duckAmt = Math.max(0, head);
+  const stride = age * 9.2 + c.variant * 1.4 + (player?.id ?? 0) * 0.9;
+  const bounce = Math.abs(Math.sin(stride * 0.5)) * 0.03 * (1 - jumpAmt * 0.8) * (1 - duckAmt * 0.6);
+  const worldY = jumpAmt * 0.55 + bounce;
+  const foot = view.project(runnerZ, slotOffset + lean * 0.35, worldY);
+  const unit = Math.min(w, h) * foot.scale;
+  const s = unit * 0.17;
+  const swing = Math.sin(stride) * (1 - jumpAmt * 0.65) * (1 - duckAmt * 0.5);
+  const crouch = 1 - duckAmt * 0.46;
+  const silhouette = '#2b2d38';
+
+  ctx.save();
+  ctx.globalAlpha = 0.40;
+  ctx.translate(foot.x, foot.y);
+  ctx.rotate(lean * 0.12);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  // Half-body silhouette (waist up)
+  const waistY = -s * 0.15;
+  const shoulderY = waistY - s * 0.88 * crouch;
+  const torsoW = s * 0.78;
+  const torsoH = s * 0.92 * crouch;
+  panel(ctx, -torsoW * 0.5, shoulderY, torsoW, torsoH, s * 0.28, silhouette);
+
+  // Swinging arms
+  for (const side of [-1, 1]) {
+    const armPhase = -side * swing;
+    const shoulderX = side * (torsoW * 0.50);
+    const armY = shoulderY + s * 0.14 * crouch;
+    const handX = shoulderX + side * s * 0.18 + armPhase * s * 0.05;
+    const handY = armY + (jumpAmt > 0.2 ? -s * 0.42 * jumpAmt : s * 0.46 * crouch + armPhase * s * 0.18);
+    stroke(ctx, [[shoulderX, armY], [handX, handY]], Math.max(2, s * 0.20), silhouette);
+  }
+
+  // Head
+  const headR = s * 0.34;
+  const headY = shoulderY - headR * 0.92;
+  ellipse(ctx, 0, headY, headR, headR * 0.98, silhouette);
+  if (showTag && player) {
+    ctx.globalAlpha = 0.78;
+    label(ctx, 'P' + (player.id + 1), 0, shoulderY + torsoH * 0.48, Math.max(9, s * 0.34), '#fffdf3', 'center', 800);
+  }
+  ctx.restore();
+}
+
+function drawView(ctx,x,y,w,h,c,s,player) {
+  const view=projection(w,h,c,s.age,player);
+  const runnerZ = 0.42;
+  const gateZ = (c.gateAt - s.age) * 2.25;
+  const pickZ = (c.pickAt - s.age) * 1.82;
+  const runners = player ? [player] : c.ids.map(id => s.players[id]);
+  const span = Math.min(1.05, 0.46 * (runners.length - 1));
   ctx.save();ctx.translate(x,y);
   ctx.beginPath();ctx.rect(0,0,w,h);ctx.clip();
-  if (!cameraVisible) horizonScene(ctx,w,h,c,s.age,view.horizon);
-  road(ctx,w,h,c,s.age,view,cameraVisible);
-  gate(ctx,w,h,c,view,s.age);
-  pickup(ctx,w,h,c,view,s.age);
+  horizonScene(ctx,w,h,c,s.age,view.horizon);
+  road(ctx,w,h,c,s.age,view);
+  if (gateZ >= runnerZ) gate(ctx,w,h,c,view,s.age);
+  if (pickZ >= runnerZ) pickup(ctx,w,h,c,view,s.age);
+  runners.forEach((p, idx) => {
+    const slotOffset = runners.length === 1 ? 0 : ((idx / (runners.length - 1)) - 0.5) * span;
+    drawRunner(ctx, w, h, c, s.age, view, p, slotOffset, runners.length > 1);
+  });
+  if (gateZ < runnerZ) gate(ctx,w,h,c,view,s.age);
+  if (pickZ < runnerZ) pickup(ctx,w,h,c,view,s.age);
+  speedLines(ctx,w,h,s.age,view);
   pickupBurst(ctx,w,h,c,s.age,player);
-  hud(ctx,w,h,c,s,player,cameraVisible);
+  hud(ctx,w,h,c,s,player,false);
   ctx.restore();
 }
 
@@ -408,10 +511,11 @@ export const runnerGame = {
   start(options={}) {
     const count=clamp(Math.floor(options.players)||1,1,4);
     const versus=options.runnerMode==='versus' && count===2;
+    const scene=envIndex[options.runnerEnv] ?? 0;
     const players=Array.from({length:count},(_,id)=>newPlayer(id));
     game={
       players,versus,age:0,finished:false,onFinish:options.onFinish,onSfx:options.onSfx,
-      courses:versus ? [makeCourse([0],0),makeCourse([1],1)] : [makeCourse(players.map(p=>p.id),0)]
+      courses:versus ? [makeCourse([0],0,scene),makeCourse([1],1,scene)] : [makeCourse(players.map(p=>p.id),0,scene)]
     };
   },
   update({dt,players=[]}) {
@@ -426,37 +530,35 @@ export const runnerGame = {
         if(tracked.gestures[move]) player.moves[move]=s.age;
       }
     }
-    if (s.players.length <= 2) {
-      const blend = 1 - Math.exp(-elapsed * 8);
-      for (const player of s.players) {
-        const head = Number(active(player,'duck',s.age))-Number(active(player,'jump',s.age));
-        player.lean += (lane(player,s.age)-player.lean)*blend;
-        player.head += (head-player.head)*blend;
-      }
+    const blend = 1 - Math.exp(-elapsed * 10);
+    for (const player of s.players) {
+      const head = Number(active(player,'duck',s.age))-Number(active(player,'jump',s.age));
+      player.lean += (lane(player,s.age)-player.lean)*blend;
+      player.head += (head-player.head)*blend;
     }
-    for(const course of s.courses) progressCourse(s,course);
+    for(const course of s.courses) {
+      progressCourse(s,course);
+      updateAmbientAnimals(course, elapsed, 4.6 + course.stage * .2);
+    }
     if(s.courses.every(c=>c.done)) finish(s);
   },
-  draw(ctx,{w,h,cameraVisible=false}) {
+  draw(ctx,{w,h}) {
     const s=game;
     if(!s || w<=0 || h<=0) return;
-    if(s.players.length!==2) {
+    if(!s.versus) {
       const player=s.players.length===1?s.players[0]:null;
-      drawView(ctx,0,0,w,h,s.courses[0],s,player,cameraVisible);
+      drawView(ctx,0,0,w,h,s.courses[0],s,player);
       return;
     }
-    // Both real players appear side by side in the same camera image.
-    const horizontal=cameraVisible || w/h>=1.18;
+    const horizontal=w/h>=1.18;
     const gap=clamp(Math.min(w,h)*.013,3,8);
     const width=horizontal?(w-gap)/2:w;
     const height=horizontal?h:(h-gap)/2;
-    ctx.fillStyle=cameraVisible ? 'rgba(255,253,243,.70)' : ink;
+    ctx.fillStyle=ink;
     if(horizontal) ctx.fillRect(width,0,gap,h);
     else ctx.fillRect(0,height,w,gap);
-    // Co-op views follow the same obstacles and team progression. Each camera
-    // and scorecard follows only its player, even when both collect together.
-    drawView(ctx,0,0,width,height,s.courses[0],s,s.players[0],cameraVisible);
-    drawView(ctx,horizontal?width+gap:0,horizontal?0:height+gap,width,height,s.versus?s.courses[1]:s.courses[0],s,s.players[1],cameraVisible);
+    drawView(ctx,0,0,width,height,s.courses[0],s,s.players[0]);
+    drawView(ctx,horizontal?width+gap:0,horizontal?0:height+gap,width,height,s.versus?s.courses[1]:s.courses[0],s,s.players[1]);
   },
   action(id,move) {
     const s=game;

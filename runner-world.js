@@ -274,19 +274,76 @@ export function drawRoadside(ctx,w,h,c,age,view,distance) {
       const point=view.project(depth,sign*item.offset);
       const size=unit*point.scale*item.size;
       if(point.x+size*.5<0 || point.x-size*.5>w) continue;
-      const kind=(item.animal?theme.animals:theme.props)[item.kind];
+      const kind=theme.props[item.kind % theme.props.length];
       const swing=Math.sin(age*(c.scene===1?3.6:2.5)+item.phase);
-      const airborne=c.scene===0 || (c.scene===2 && item.animal);
-      const y=point.y-size*(airborne ? .26+.055*swing : item.animal ? .022*(1+swing) : 0);
+      const airborne=c.scene===0;
+      const y=point.y-size*(airborne ? .26+.055*swing : 0);
       if(!airborne) ellipse(ctx,point.x,point.y,size*.22,Math.max(.5,size*.031),'rgba(55,87,83,.14)');
       ctx.save();
       ctx.translate(point.x,y);
-      if(item.animal) ctx.rotate(swing*(c.scene===1?.025:.055));
-      // Birds and sea creatures face toward the route. Forest animals face left in the art.
-      const mirror=item.animal && kind!=='jellyfish' && (c.scene===1?sign<0:sign>0);
-      if(mirror) ctx.scale(-1,1);
       ctx.drawImage(sprite(kind),-size*87/176,-size*164/176,size,size);
       ctx.restore();
     }
+  }
+}
+
+export function updateAmbientAnimals(c, dt, speed) {
+  if (!c.passers) {
+    c.passers = [];
+    c.nextPasserAt = 1.2 + Math.random() * 1.8;
+  }
+  c.passerClock = (c.passerClock || 0) + dt;
+  if (c.passerClock >= c.nextPasserAt && c.passers.length < 3) {
+    c.nextPasserAt = c.passerClock + 2.1 + Math.random() * 3.2;
+    const theme = scenes[c.scene];
+    const side = Math.random() < .5 ? -1 : 1;
+    const cross = Math.random() < .45;
+    c.passers.push({
+      kind: theme.animals[Math.floor(Math.random() * theme.animals.length)],
+      side,
+      z: cross ? 5.5 + Math.random() * 5.5 : 13 + Math.random() * 4,
+      offset: cross ? side * (2.6 + Math.random() * .7) : side * (1.22 + Math.random() * .65),
+      vz: cross ? -(speed * .62 + Math.random() * 1.4) : -(speed + 1.6 + Math.random() * 2.2),
+      vx: cross ? -side * (.68 + Math.random() * .42) : side * (.08 - Math.random() * .16),
+      size: .68 + Math.random() * .26,
+      phase: Math.random() * tau,
+      cross
+    });
+  }
+  for (let i = c.passers.length - 1; i >= 0; i--) {
+    const a = c.passers[i];
+    a.z += a.vz * dt;
+    a.offset += a.vx * dt;
+    // Keep ambient animals beside the track so they never block the player.
+    if (Math.abs(a.offset) < 1.12) a.offset = Math.sign(a.offset || a.side) * 1.12;
+    if (a.z < -0.42 || Math.abs(a.offset) > 3.6) c.passers.splice(i, 1);
+  }
+}
+
+export function drawAmbientAnimals(ctx, w, h, c, age, view) {
+  if (!c.passers?.length) return;
+  const unit = Math.min(w, h);
+  const sorted = [...c.passers].sort((a, b) => b.z - a.z);
+  for (const a of sorted) {
+    if (a.z < -0.35) continue;
+    const hop = Math.abs(Math.sin(age * (c.scene === 1 ? 8.5 : 4.2) + a.phase));
+    const worldY = c.scene === 0 ? .55 + Math.sin(age * 3.5 + a.phase) * .22
+      : c.scene === 2 ? .32 + Math.sin(age * 2.6 + a.phase) * .16
+      : hop * .14;
+    const point = view.project(a.z, a.offset, worldY);
+    const size = unit * point.scale * a.size;
+    if (point.x + size < 0 || point.x - size > w) continue;
+    if (c.scene === 1) {
+      const ground = view.project(a.z, a.offset, 0);
+      ellipse(ctx, ground.x, ground.y, size * .22, Math.max(.5, size * .032), 'rgba(55,87,83,.16)');
+    }
+    ctx.save();
+    ctx.translate(point.x, point.y);
+    ctx.rotate(Math.sin(age * 6 + a.phase) * (c.scene === 1 ? .06 : .08));
+    const movingRight = a.cross ? a.vx > 0 : a.side < 0;
+    const mirror = a.kind !== 'jellyfish' && (c.scene === 1 ? movingRight : !movingRight);
+    if (mirror) ctx.scale(-1, 1);
+    ctx.drawImage(sprite(a.kind), -size * 87 / 176, -size * 164 / 176, size, size);
+    ctx.restore();
   }
 }

@@ -15,11 +15,13 @@ function loadPreferences() {
     playerColors.push(paletteKeys.includes(key) && !playerColors.includes(key)
       ? key : paletteKeys.find(candidate => !playerColors.includes(candidate)));
   }
+  const runnerEnv = ['sky', 'forest', 'ocean'].includes(saved?.runnerEnv) ? saved.runnerEnv : 'sky';
   return {
     skin: saved?.skin === 'bubble' ? 'bubble' : 'balloon',
     colorChallenge: saved?.colorChallenge === true,
     playerColors,
-    runnerMode: saved?.runnerMode === 'versus' ? 'versus' : 'cooperative'
+    runnerMode: saved?.runnerMode === 'versus' ? 'versus' : 'cooperative',
+    runnerEnv
   };
 }
 
@@ -47,6 +49,14 @@ export function mountGameOptions(container) {
       <legend>玩家颜色</legend>
       <p class="go-help">击中自己的颜色 +10 分，击中其他颜色 −5 分。选择他人的颜色可与对方互换。</p>
       <div class="go-player-grid"></div>
+    </fieldset>
+    <fieldset data-setting="runnerEnv">
+      <legend>跑酷环境</legend>
+      <div class="segments">
+        <button type="button" data-choice="sky">天空</button>
+        <button type="button" data-choice="forest">森林</button>
+        <button type="button" data-choice="ocean">海洋</button>
+      </div>
     </fieldset>
     <fieldset data-setting="runnerMode">
       <legend>双人跑酷模式</legend>
@@ -100,7 +110,8 @@ export function mountGameOptions(container) {
       skin: balloon ? preferences.skin : 'balloon',
       colorChallenge: challenge,
       playerColors: challenge ? preferences.playerColors.slice(0, count) : [],
-      runnerMode: activeGame === 'runner' && count === 2 ? preferences.runnerMode : 'cooperative'
+      runnerMode: activeGame === 'runner' && count === 2 ? preferences.runnerMode : 'cooperative',
+      runnerEnv: preferences.runnerEnv
     };
   }
 
@@ -108,10 +119,12 @@ export function mountGameOptions(container) {
     activeGame = gameId;
     count = Math.max(1, Math.min(4, Math.trunc(Number(players)) || 1));
     const balloon = gameId === 'balloon';
-    const pairedRun = gameId === 'runner' && count === 2;
-    root.hidden = !balloon && !pairedRun;
+    const runner = gameId === 'runner';
+    const pairedRun = runner && count === 2;
+    root.hidden = !balloon && !runner;
     root.querySelector('[data-setting=skin]').hidden = !balloon;
     root.querySelector('[data-setting=colorChallenge]').hidden = !balloon || count < 2;
+    root.querySelector('[data-setting=runnerEnv]').hidden = !runner;
     root.querySelector('[data-setting=runnerMode]').hidden = !pairedRun;
     assignments.hidden = !values().colorChallenge;
     for (const group of root.querySelectorAll('[data-setting]')) {
