@@ -217,7 +217,13 @@ async function startRound(token) {
     $('intermission').hidden = true;
     $('controls').hidden = mode !== 'demo' || (game === balloonGame && prefs.players === 1);
     if (document.hidden || panel.open) pause('游戏已暂停');
-    else raf = requestAnimationFrame(tick);
+    else {
+      if (game !== danceGame && gameAudio.enabled) {
+        await gameAudio.unlock();
+        if (revision === token && phase === 'playing') gameAudio.startBgm(roundOptions.bgm);
+      }
+      raf = requestAnimationFrame(tick);
+    }
   } catch (e) { if (revision === token) fail(e); }
 }
 function finish(scores,details) {
@@ -295,7 +301,13 @@ async function resume() {
     lastTime = 0; loseSince = 0; phase = 'playing'; $('pause').disabled = false;
     $('intermission').hidden = true;
     if (document.hidden || panel.open) pause('游戏已暂停');
-    else raf = requestAnimationFrame(tick);
+    else {
+      if (game !== danceGame && gameAudio.enabled) {
+        await gameAudio.unlock();
+        if (revision === token && phase === 'playing') gameAudio.startBgm(roundOptions.bgm);
+      }
+      raf = requestAnimationFrame(tick);
+    }
   } catch (e) { if (token === revision) fail(e); }
 }
 $('pause').onclick = () => pause('游戏已暂停');

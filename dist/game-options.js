@@ -16,12 +16,14 @@ function loadPreferences() {
       ? key : paletteKeys.find(candidate => !playerColors.includes(candidate)));
   }
   const runnerEnv = ['sky', 'forest', 'ocean'].includes(saved?.runnerEnv) ? saved.runnerEnv : 'sky';
+  const bgm = ['auto', 'twinkle', 'tigers', 'lamb', 'happy', 'off'].includes(saved?.bgm) ? saved.bgm : 'auto';
   return {
     skin: saved?.skin === 'bubble' ? 'bubble' : 'balloon',
     colorChallenge: saved?.colorChallenge === true,
     playerColors,
     runnerMode: saved?.runnerMode === 'versus' ? 'versus' : 'cooperative',
-    runnerEnv
+    runnerEnv,
+    bgm
   };
 }
 
@@ -63,6 +65,17 @@ export function mountGameOptions(container) {
       <div class="segments">
         <button type="button" data-choice="cooperative">合作闯关</button>
         <button type="button" data-choice="versus">双人对战</button>
+      </div>
+    </fieldset>
+    <fieldset data-setting="bgm">
+      <legend>童歌背景音乐</legend>
+      <div class="segments">
+        <button type="button" data-choice="auto">轮播童歌</button>
+        <button type="button" data-choice="twinkle">小星星</button>
+        <button type="button" data-choice="tigers">两只老虎</button>
+        <button type="button" data-choice="lamb">小羊羔</button>
+        <button type="button" data-choice="happy">幸福拍手</button>
+        <button type="button" data-choice="off">关闭</button>
       </div>
     </fieldset>`;
   container.replaceChildren(root);
@@ -111,7 +124,8 @@ export function mountGameOptions(container) {
       colorChallenge: challenge,
       playerColors: challenge ? preferences.playerColors.slice(0, count) : [],
       runnerMode: activeGame === 'runner' && count === 2 ? preferences.runnerMode : 'cooperative',
-      runnerEnv: preferences.runnerEnv
+      runnerEnv: preferences.runnerEnv,
+      bgm: preferences.bgm
     };
   }
 
@@ -126,6 +140,7 @@ export function mountGameOptions(container) {
     root.querySelector('[data-setting=colorChallenge]').hidden = !balloon || count < 2;
     root.querySelector('[data-setting=runnerEnv]').hidden = !runner;
     root.querySelector('[data-setting=runnerMode]').hidden = !pairedRun;
+    root.querySelector('[data-setting=bgm]').hidden = !balloon && !runner;
     assignments.hidden = !values().colorChallenge;
     for (const group of root.querySelectorAll('[data-setting]')) {
       const selected = String(preferences[group.dataset.setting]);

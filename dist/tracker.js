@@ -50,11 +50,26 @@ function measure(landmarks, mirror, points, region = {x: 0, y: 0, w: 1, h: 1}) {
   const height = Math.max(0.045, mean(hips, 'y') - mean(shoulders, 'y'));
   const width = shoulders.length === 2 ? Math.abs(leftShoulder.x - rightShoulder.x) : 0;
   const handTip = (wristIdx, indexIdx, pinkyIdx) => {
+    const wrist = point(wristIdx);
     const index = point(indexIdx);
-    if (index.score >= visible) return index;
     const pinky = point(pinkyIdx);
-    if (pinky.score >= visible) return pinky;
-    return point(wristIdx);
+    // Pose landmark 19/20 sits around the index knuckle/mid-finger; extrapolate along wrist->index to reach the fingertip.
+    if (index.score >= visible && wrist.score >= visible) {
+      return {
+        x: clamp(index.x + (index.x - wrist.x) * 0.72, 0, 1),
+        y: clamp(index.y + (index.y - wrist.y) * 0.72, 0, 1),
+        score: index.score
+      };
+    }
+    if (index.score >= visible) return index;
+    if (pinky.score >= visible && wrist.score >= visible) {
+      return {
+        x: clamp(pinky.x + (pinky.x - wrist.x) * 0.72, 0, 1),
+        y: clamp(pinky.y + (pinky.y - wrist.y) * 0.72, 0, 1),
+        score: pinky.score
+      };
+    }
+    return pinky.score >= visible ? pinky : wrist;
   };
   return {
     leftHand: handTip(15, 19, 17), rightHand: handTip(16, 20, 18),
@@ -222,13 +237,24 @@ export class MotionTracker {
     }
     try {
       onStatus('等待相机权限…');
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: {ideal: camera}, width: {ideal: count > 1 ? 960 : 640},
-          height: {ideal: count > 1 ? 540 : 480}, frameRate: {ideal: 24, max: 30}
-        }
-      });
+      const baseVideo = {
+        width: {ideal: count > 1 ? 960 : 640},
+        height: {ideal: count > 1 ? 540 : 480},
+        frameRate: {ideal: 24, max: 30}
+      };
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {...baseVideo, facingMode: {exact: camera}}
+        });
+      } catch (exactError) {
+        if (exactError.name === 'NotAllowedError' || exactError.name === 'NotReadableError') throw exactError;
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {...baseVideo, facingMode: {ideal: camera}}
+        });
+      }
       if (!active()) {
         stream.getTracks().forEach(t => t.stop());
         throw cancelled();
@@ -239,7 +265,7 @@ export class MotionTracker {
       if (facing && facing !== camera && ['user', 'environment'].includes(facing)) {
         throw new Error('设备未提供所选镜头。请改选另一个镜头后重试。');
       }
-      const mirror = (facing || camera) === 'user';
+      const mirror = camera === 'user';
       video.muted = true;
       video.autoplay = true;
       video.playsInline = true;
@@ -328,6 +354,7 @@ export class MotionTracker {
     }
     this.video.pause();
     this.video.srcObject = null;
+    this.video.style.transform = 'none';
     if (this.detector) {
       this.detector.close();
       this.detector = null;
