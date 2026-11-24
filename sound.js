@@ -139,7 +139,105 @@ function play(name, playerId) {
   } catch { /* Sound is optional on a device with interrupted audio output. */ }
 }
 
+const midiHz = m => 440 * Math.pow(2, (m - 69) / 12);
+const nurserySongs = {
+  twinkle: {
+    bpm: 118,
+    notes: [
+      [60,1],[60,1],[67,1],[67,1],[69,1],[69,1],[67,2],
+      [65,1],[65,1],[64,1],[64,1],[62,1],[62,1],[60,2],
+      [67,1],[67,1],[65,1],[65,1],[64,1],[64,1],[62,2],
+      [67,1],[67,1],[65,1],[65,1],[64,1],[64,1],[62,2],
+      [60,1],[60,1],[67,1],[67,1],[69,1],[69,1],[67,2],
+      [65,1],[65,1],[64,1],[64,1],[62,1],[62,1],[60,2]
+    ]
+  },
+  tigers: {
+    bpm: 124,
+    notes: [
+      [60,1],[62,1],[64,1],[60,1],[60,1],[62,1],[64,1],[60,1],
+      [64,1],[65,1],[67,2],[64,1],[65,1],[67,2],
+      [67,.5],[69,.5],[67,.5],[65,.5],[64,1],[60,1],
+      [67,.5],[69,.5],[67,.5],[65,.5],[64,1],[60,1],
+      [60,1],[55,1],[60,2],[60,1],[55,1],[60,2]
+    ]
+  },
+  lamb: {
+    bpm: 126,
+    notes: [
+      [64,1],[62,1],[60,1],[62,1],[64,1],[64,1],[64,2],
+      [62,1],[62,1],[62,2],[64,1],[67,1],[67,2],
+      [64,1],[62,1],[60,1],[62,1],[64,1],[64,1],[64,1],[64,1],
+      [62,1],[62,1],[64,1],[62,1],[60,4]
+    ]
+  },
+  happy: {
+    bpm: 132,
+    notes: [
+      [55,.5],[55,.5],[60,1],[60,1],[60,1],[60,1],[60,1],[60,1],[59,1],[60,1],[62,2],[0,2],
+      [55,.5],[55,.5],[62,1],[62,1],[62,1],[62,1],[62,1],[62,1],[60,1],[62,1],[64,2],[0,2],
+      [64,.5],[64,.5],[65,1],[65,1],[65,1],[65,1],[65,1],[65,1],[64,1],[62,1],[60,2],[0,2]
+    ]
+  }
+};
+const songOrder = Object.keys(nurserySongs);
+let bgmTimer = 0;
+let bgmMode = 'auto';
+let bgmSongIndex = 0;
+let bgmNoteIndex = 0;
+let bgmNextTime = 0;
+let bgmBeatSum = 0;
+
+function playBgmNote(start, duration, midi, downbeat) {
+  if (!midi) return;
+  const hz = midiHz(midi);
+  tone(start, Math.min(duration * 0.92, 0.55), hz, hz, 0.11, 'triangle');
+  tone(start, Math.min(duration * 0.65, 0.35), hz * 2, hz * 2, 0.032, 'sine');
+  if (downbeat) tone(start, Math.min(duration * 0.95, 0.45), hz * 0.5, hz * 0.5, 0.048, 'sine');
+}
+
+function scheduleBgm() {
+  if (!enabled || !bgmTimer || context?.state !== 'running') return;
+  const horizon = context.currentTime + 0.32;
+  while (bgmNextTime < horizon) {
+    const key = bgmMode === 'auto' ? songOrder[bgmSongIndex % songOrder.length] : bgmMode;
+    const song = nurserySongs[key] || nurserySongs.twinkle;
+    const [midi, beats] = song.notes[bgmNoteIndex];
+    const sec = beats * (60 / song.bpm);
+    playBgmNote(bgmNextTime, sec, midi, Math.abs(bgmBeatSum % 2) < 0.01);
+    bgmNextTime += sec;
+    bgmBeatSum += beats;
+    bgmNoteIndex++;
+    if (bgmNoteIndex >= song.notes.length) {
+      bgmNoteIndex = 0;
+      bgmBeatSum = 0;
+      bgmNextTime += 0.45;
+      if (bgmMode === 'auto') bgmSongIndex = (bgmSongIndex + 1) % songOrder.length;
+    }
+  }
+}
+
+function startBgm(choice = 'auto') {
+  stopBgm();
+  if (!enabled || choice === 'off') return;
+  if (!prepare() || context.state !== 'running') return;
+  bgmMode = nurserySongs[choice] ? choice : 'auto';
+  bgmNoteIndex = 0;
+  bgmBeatSum = 0;
+  bgmNextTime = context.currentTime + 0.08;
+  bgmTimer = setInterval(scheduleBgm, 110);
+  scheduleBgm();
+}
+
+function stopBgm() {
+  if (bgmTimer) {
+    clearInterval(bgmTimer);
+    bgmTimer = 0;
+  }
+}
+
 function stop() {
+  stopBgm();
   for (const [source, release] of sources) {
     try { source.stop(); } catch {}
     release();
@@ -154,5 +252,5 @@ export const gameAudio = {
     if (!enabled) stop();
     try { localStorage.setItem(preferenceKey, enabled ? '1' : '0'); } catch {}
   },
-  unlock, play, stop
+  unlock, play, stop, startBgm, stopBgm
 };
