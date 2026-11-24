@@ -10,7 +10,7 @@ const icon = name => '<svg aria-hidden="true"><use href="#i-' + name + '"/></svg
 const games = [
   {id:'balloon', title:'气球爆破', en:'BALLOON POP', tag:'反应挑战', detail:'挥动双手，戳破从天而降的气球和泡泡！', short:'戳破气球与泡泡，多人还可挑战专属颜色。', meta:'动作捕捉', game:balloonGame},
   {id:'dance', title:'节拍舞台', en:'BEAT STUDIO', tag:'音乐节奏', detail:'上传喜欢的歌，用 14 种动作编排自己的舞步。', short:'跟拍横划、摆手、跳跃，自由组合舞步。', meta:'自由编舞', game:danceGame},
-  {id:'runner', title:'冒险跑酷', en:'RUSH RUN', tag:'冒险闯关', detail:'跑过天空、森林和海底，收集星星和金币！', short:'一起收集星星与金币，或双人分屏竞赛。', meta:'第一视角', game:runnerGame}
+  {id:'runner', title:'冒险跑酷', en:'RUSH RUN', tag:'冒险闯关', detail:'第一视角跑过天空、森林或海洋，跳起与下蹲躲避障碍！', short:'第一视角跑酷，自由选择天空、森林或海洋环境。', meta:'第一视角', game:runnerGame}
 ];
 const actions = {left:'向左',right:'向右',jump:'跳跃',duck:'下蹲',hit:'跟拍'};
 const palette = ['#d5f75a','#ffb094','#9adfff','#dabaff'];
@@ -27,7 +27,8 @@ const tracker = new MotionTracker(camera);
 // The video and game use one uncropped rectangle, so a tracked hand, its marker,
 // and a target all use the same coordinates, including after rotating the phone.
 function fitCamera() {
-  if (camera.hidden || !camera.videoWidth || !camera.videoHeight) {
+  if (camera.hidden || !camera.videoWidth || !camera.videoHeight ||
+      (game === runnerGame && !stage.classList.contains('calibrating'))) {
     playfield.style.removeProperty('width');
     playfield.style.removeProperty('height');
     return;
@@ -205,6 +206,7 @@ async function begin(requestMode) {
 $('camera-start').onclick = () => begin('camera'); $('demo-start').onclick = () => begin('demo');
 async function startRound(token) {
   phase = 'starting'; stage.classList.remove('calibrating');
+  fitCamera();
   overlay('正在开始',games[chosen].title);
   try {
     await game.start({...prefs,...roundOptions,mode,soundEnabled:gameAudio.enabled,
@@ -311,7 +313,7 @@ function buildControls() {
       const group = document.createElement('div'); group.className = 'race-pad';
       const label = document.createElement('strong'); label.textContent = 'P' + (id + 1);
       group.append(label);
-      for (const name of ['left','jump','duck','right']) {
+      for (const name of ['jump','duck']) {
         const control = button(actions[name], () => input(name, id));
         control.setAttribute('aria-label', '玩家 ' + (id + 1) + ' ' + actions[name]);
         group.append(control);
@@ -325,7 +327,7 @@ function buildControls() {
     for (let i = 0; i < prefs.players; i++) picker.add(new Option('玩家 ' + (i+1),String(i)));
     picker.onchange = () => {demoPlayer = Number(picker.value);}; root.append(picker);
   }
-  const names = game === runnerGame ? ['left','jump','duck','right'] : game === danceGame ? ['hit'] : [];
+  const names = game === runnerGame ? ['jump','duck'] : game === danceGame ? ['hit'] : [];
   for (const a of names) root.append(button(actions[a],() => input(a)));
 }
 function input(a, player = demoPlayer) {

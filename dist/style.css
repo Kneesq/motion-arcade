@@ -858,6 +858,19 @@ dialog::backdrop {
   pointer-events: none;
 }
 
+#stage[data-game="runner"]:not(.calibrating) #camera {
+  inset: 10px 10px auto auto;
+  width: clamp(86px, 16vw, 156px);
+  height: auto;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 253, 243, .85);
+  box-shadow: 0 6px 20px rgba(24, 22, 34, .32);
+  opacity: .88;
+  z-index: 2;
+}
+
 .overlay {
   position: absolute;
   inset: 46px 0 0;

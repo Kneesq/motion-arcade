@@ -49,8 +49,15 @@ function measure(landmarks, mirror, points, region = {x: 0, y: 0, w: 1, h: 1}) {
   };
   const height = Math.max(0.045, mean(hips, 'y') - mean(shoulders, 'y'));
   const width = shoulders.length === 2 ? Math.abs(leftShoulder.x - rightShoulder.x) : 0;
+  const handTip = (wristIdx, indexIdx, pinkyIdx) => {
+    const index = point(indexIdx);
+    if (index.score >= visible) return index;
+    const pinky = point(pinkyIdx);
+    if (pinky.score >= visible) return pinky;
+    return point(wristIdx);
+  };
   return {
-    leftHand: point(15), rightHand: point(16),
+    leftHand: handTip(15, 19, 17), rightHand: handTip(16, 20, 18),
     leftFoot: points === 4 ? point(27) : blank(), rightFoot: points === 4 ? point(28) : blank(),
     leftShoulder, rightShoulder, leftHip, rightHip, center, height, width
   };
@@ -157,7 +164,7 @@ function updateTrack(t, p, now) {
   const sideways = t.x - t.baseX, down = t.y - t.baseY;
   const sideThreshold = Math.max(0.032, t.baseWidth * 0.48);
   const upThreshold = Math.max(0.024, t.baseHeight * 0.21);
-  const downThreshold = Math.max(0.042, t.baseHeight * 0.37);
+  const downThreshold = Math.max(0.036, t.baseHeight * 0.30);
   // Follow small changes in standing posture, preserving deliberate, held poses.
   if (calibrating || (Math.abs(sideways) < sideThreshold * 0.65 && Math.abs(down) < upThreshold * 0.65)) {
     const rate = calibrating ? 0.22 : Math.min(dt / 6500, 0.08);
@@ -169,8 +176,8 @@ function updateTrack(t, p, now) {
   }
   if (!calibrating) {
     const feetRose = floor === null || t.baseFoot === null || t.baseFoot - floor > upThreshold * 0.50;
-    if (down < -upThreshold && feetRose) t.jumpUntil = now + 230;
-    if (down > downThreshold) t.duckUntil = now + 150;
+    if (down < -upThreshold && feetRose) t.jumpUntil = now + 260;
+    if (down > downThreshold) t.duckUntil = now + 220;
   }
   const {height, width, ...player} = p;
   return {
