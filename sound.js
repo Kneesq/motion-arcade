@@ -182,6 +182,7 @@ const nurserySongs = {
 };
 const songOrder = Object.keys(nurserySongs);
 let bgmTimer = 0;
+let bgmPreviewStop = 0;
 let bgmMode = 'auto';
 let bgmSongIndex = 0;
 let bgmNoteIndex = 0;
@@ -191,13 +192,18 @@ let bgmBeatSum = 0;
 function playBgmNote(start, duration, midi, downbeat) {
   if (!midi) return;
   const hz = midiHz(midi);
-  tone(start, Math.min(duration * 0.92, 0.55), hz, hz, 0.11, 'triangle');
-  tone(start, Math.min(duration * 0.65, 0.35), hz * 2, hz * 2, 0.032, 'sine');
-  if (downbeat) tone(start, Math.min(duration * 0.95, 0.45), hz * 0.5, hz * 0.5, 0.048, 'sine');
+  tone(start, Math.min(duration * 0.92, 0.55), hz, hz, 0.24, 'triangle');
+  tone(start, Math.min(duration * 0.65, 0.35), hz * 2, hz * 2, 0.065, 'sine');
+  if (downbeat) tone(start, Math.min(duration * 0.95, 0.45), hz * 0.5, hz * 0.5, 0.095, 'sine');
 }
 
 function scheduleBgm() {
-  if (!enabled || !bgmTimer || context?.state !== 'running') return;
+  if (!enabled || !bgmTimer || !context) return;
+  if (context.state !== 'running') {
+    context.resume().catch(() => {});
+    return;
+  }
+  if (bgmNextTime < context.currentTime) bgmNextTime = context.currentTime + 0.04;
   const horizon = context.currentTime + 0.32;
   while (bgmNextTime < horizon) {
     const key = bgmMode === 'auto' ? songOrder[bgmSongIndex % songOrder.length] : bgmMode;
@@ -220,16 +226,29 @@ function scheduleBgm() {
 function startBgm(choice = 'auto') {
   stopBgm();
   if (!enabled || choice === 'off') return;
-  if (!prepare() || context.state !== 'running') return;
+  if (!prepare()) return;
+  if (context.state !== 'running') unlock();
   bgmMode = nurserySongs[choice] ? choice : 'auto';
   bgmNoteIndex = 0;
   bgmBeatSum = 0;
-  bgmNextTime = context.currentTime + 0.08;
+  bgmNextTime = context.currentTime + 0.06;
   bgmTimer = setInterval(scheduleBgm, 110);
   scheduleBgm();
 }
 
+async function previewBgm(choice = 'auto') {
+  stop();
+  if (!enabled || choice === 'off') return;
+  await unlock();
+  startBgm(choice);
+  bgmPreviewStop = setTimeout(() => stop(), 3200);
+}
+
 function stopBgm() {
+  if (bgmPreviewStop) {
+    clearTimeout(bgmPreviewStop);
+    bgmPreviewStop = 0;
+  }
   if (bgmTimer) {
     clearInterval(bgmTimer);
     bgmTimer = 0;
@@ -245,6 +264,14 @@ function stop() {
   bursts.clear();
 }
 
+function wakeAudio() {
+  if (enabled && bgmTimer && context && context.state !== 'running') {
+    unlock().then(() => { if (bgmTimer) scheduleBgm(); });
+  }
+}
+window.addEventListener('pointerdown', wakeAudio, {passive: true});
+window.addEventListener('keydown', wakeAudio, {passive: true});
+
 export const gameAudio = {
   get enabled() { return enabled; },
   setEnabled(value) {
@@ -252,5 +279,5 @@ export const gameAudio = {
     if (!enabled) stop();
     try { localStorage.setItem(preferenceKey, enabled ? '1' : '0'); } catch {}
   },
-  unlock, play, stop, startBgm, stopBgm
+  unlock, play, stop, startBgm, stopBgm, previewBgm
 };

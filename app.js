@@ -60,6 +60,7 @@ function showSoundSetting() {
 }
 for (const control of soundButtons) control.onclick = () => {
   gameAudio.setEnabled(!gameAudio.enabled);
+  if (gameAudio.enabled) gameAudio.unlock();
   showSoundSetting();
 };
 showSoundSetting();
@@ -98,6 +99,7 @@ panel.addEventListener('click',e => { if (e.target === panel) panel.close(); });
 panel.addEventListener('close',() => {
   document.body.style.overflow = phase === 'lobby' ? '' : 'hidden';
   $('dance-editor').querySelectorAll('audio').forEach(a => a.pause());
+  if (phase === 'lobby') gameAudio.stop();
 });
 function renderPrefs() {
   gameOptions.render(games[chosen].id, prefs.players);
