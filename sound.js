@@ -141,8 +141,23 @@ function play(name, playerId) {
 
 const midiHz = m => 440 * Math.pow(2, (m - 69) / 12);
 const nurserySongs = {
+  babyshark: {
+    bpm: 124,
+    bass: [43, 48, 40, 50],
+    notes: [
+      [62,.5],[64,.5],[67,.5],[67,.5],[67,.5],[67,.25],[67,.25],[67,.5],[67,.5],
+      [62,.5],[64,.5],[67,.5],[67,.5],[67,.5],[67,.25],[67,.25],[67,.5],[67,.5],
+      [62,.5],[64,.5],[67,.5],[67,.5],[67,.5],[67,.25],[67,.25],[67,.5],[67,.5],
+      [67,.5],[67,.5],[66,1.5],[0,1.5],
+      [74,.5],[76,.5],[79,.5],[79,.5],[79,.5],[79,.25],[79,.25],[79,.5],[79,.5],
+      [74,.5],[76,.5],[79,.5],[79,.5],[79,.5],[79,.25],[79,.25],[79,.5],[79,.5],
+      [74,.5],[76,.5],[79,.5],[79,.5],[79,.5],[79,.25],[79,.25],[79,.5],[79,.5],
+      [79,.5],[79,.5],[78,1.5],[0,1.5]
+    ]
+  },
   twinkle: {
-    bpm: 118,
+    bpm: 134,
+    bass: [48, 45, 41, 43],
     notes: [
       [60,1],[60,1],[67,1],[67,1],[69,1],[69,1],[67,2],
       [65,1],[65,1],[64,1],[64,1],[62,1],[62,1],[60,2],
@@ -153,7 +168,8 @@ const nurserySongs = {
     ]
   },
   tigers: {
-    bpm: 124,
+    bpm: 138,
+    bass: [48, 48, 43, 48],
     notes: [
       [60,1],[62,1],[64,1],[60,1],[60,1],[62,1],[64,1],[60,1],
       [64,1],[65,1],[67,2],[64,1],[65,1],[67,2],
@@ -163,7 +179,8 @@ const nurserySongs = {
     ]
   },
   lamb: {
-    bpm: 126,
+    bpm: 138,
+    bass: [48, 43, 48, 43],
     notes: [
       [64,1],[62,1],[60,1],[62,1],[64,1],[64,1],[64,2],
       [62,1],[62,1],[62,2],[64,1],[67,1],[67,2],
@@ -172,7 +189,8 @@ const nurserySongs = {
     ]
   },
   happy: {
-    bpm: 132,
+    bpm: 144,
+    bass: [48, 43, 41, 48],
     notes: [
       [55,.5],[55,.5],[60,1],[60,1],[60,1],[60,1],[60,1],[60,1],[59,1],[60,1],[62,2],[0,2],
       [55,.5],[55,.5],[62,1],[62,1],[62,1],[62,1],[62,1],[62,1],[60,1],[62,1],[64,2],[0,2],
@@ -187,14 +205,53 @@ let bgmMode = 'auto';
 let bgmSongIndex = 0;
 let bgmNoteIndex = 0;
 let bgmNextTime = 0;
-let bgmBeatSum = 0;
+let bgmDrumTime = 0;
+let bgmDrumStep = 0;
 
-function playBgmNote(start, duration, midi, downbeat) {
+function playKick(start) {
+  tone(start, 0.11, 145, 42, 0.30, 'sine');
+}
+
+function playClap(start) {
+  const snap = context.createBufferSource();
+  snap.buffer = popNoise;
+  const filter = context.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(1700, start);
+  filter.Q.value = 1.1;
+  playSource(snap, start, 0.08, 0.22, filter);
+}
+
+function playHat(start) {
+  const snap = context.createBufferSource();
+  snap.buffer = popNoise;
+  const filter = context.createBiquadFilter();
+  filter.type = 'highpass';
+  filter.frequency.setValueAtTime(6800, start);
+  playSource(snap, start, 0.032, 0.09, filter);
+}
+
+function playSynthLead(start, duration, midi) {
   if (!midi) return;
   const hz = midiHz(midi);
-  tone(start, Math.min(duration * 0.92, 0.55), hz, hz, 0.24, 'triangle');
-  tone(start, Math.min(duration * 0.65, 0.35), hz * 2, hz * 2, 0.065, 'sine');
-  if (downbeat) tone(start, Math.min(duration * 0.95, 0.45), hz * 0.5, hz * 0.5, 0.095, 'sine');
+  const len = Math.min(duration * 0.80, 0.42);
+  const osc = context.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(hz, start);
+  const filter = context.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(2400, start);
+  filter.frequency.exponentialRampToValueAtTime(950, start + len);
+  playSource(osc, start, len, 0.14, filter);
+  tone(start, len, hz, hz, 0.16, 'triangle');
+  tone(start, Math.min(len * 0.7, 0.22), hz * 2, hz * 2, 0.045, 'sine');
+}
+
+function playBassPulse(start, stepDuration, song, step) {
+  const bar = Math.floor(step / 8);
+  const root = song.bass[bar % song.bass.length];
+  const octave = step % 2 === 1 ? 12 : 0;
+  tone(start, stepDuration * 0.85, midiHz(root + octave), midiHz(root + octave), step % 2 === 0 ? 0.15 : 0.09, 'triangle');
 }
 
 function scheduleBgm() {
@@ -203,21 +260,35 @@ function scheduleBgm() {
     context.resume().catch(() => {});
     return;
   }
-  if (bgmNextTime < context.currentTime) bgmNextTime = context.currentTime + 0.04;
-  const horizon = context.currentTime + 0.32;
+  const now = context.currentTime;
+  if (bgmNextTime < now) bgmNextTime = now + 0.04;
+  if (bgmDrumTime < now) bgmDrumTime = now + 0.04;
+  const horizon = now + 0.32;
+  const key = bgmMode === 'auto' ? songOrder[bgmSongIndex % songOrder.length] : bgmMode;
+  const song = nurserySongs[key] || nurserySongs.babyshark;
+  const beatSec = 60 / song.bpm;
+  const eighthSec = beatSec * 0.5;
+
+  while (bgmDrumTime < horizon) {
+    const step = bgmDrumStep % 8;
+    if (step % 2 === 0) playKick(bgmDrumTime);
+    if (step === 2 || step === 6) playClap(bgmDrumTime);
+    if (step % 2 === 1) playHat(bgmDrumTime);
+    playBassPulse(bgmDrumTime, eighthSec, song, bgmDrumStep);
+    bgmDrumTime += eighthSec;
+    bgmDrumStep++;
+  }
+
   while (bgmNextTime < horizon) {
-    const key = bgmMode === 'auto' ? songOrder[bgmSongIndex % songOrder.length] : bgmMode;
-    const song = nurserySongs[key] || nurserySongs.twinkle;
-    const [midi, beats] = song.notes[bgmNoteIndex];
-    const sec = beats * (60 / song.bpm);
-    playBgmNote(bgmNextTime, sec, midi, Math.abs(bgmBeatSum % 2) < 0.01);
+    const activeKey = bgmMode === 'auto' ? songOrder[bgmSongIndex % songOrder.length] : bgmMode;
+    const activeSong = nurserySongs[activeKey] || nurserySongs.babyshark;
+    const [midi, beats] = activeSong.notes[bgmNoteIndex];
+    const sec = beats * (60 / activeSong.bpm);
+    playSynthLead(bgmNextTime, sec, midi);
     bgmNextTime += sec;
-    bgmBeatSum += beats;
     bgmNoteIndex++;
-    if (bgmNoteIndex >= song.notes.length) {
+    if (bgmNoteIndex >= activeSong.notes.length) {
       bgmNoteIndex = 0;
-      bgmBeatSum = 0;
-      bgmNextTime += 0.45;
       if (bgmMode === 'auto') bgmSongIndex = (bgmSongIndex + 1) % songOrder.length;
     }
   }
@@ -230,9 +301,10 @@ function startBgm(choice = 'auto') {
   if (context.state !== 'running') unlock();
   bgmMode = nurserySongs[choice] ? choice : 'auto';
   bgmNoteIndex = 0;
-  bgmBeatSum = 0;
+  bgmDrumStep = 0;
   bgmNextTime = context.currentTime + 0.06;
-  bgmTimer = setInterval(scheduleBgm, 110);
+  bgmDrumTime = bgmNextTime;
+  bgmTimer = setInterval(scheduleBgm, 90);
   scheduleBgm();
 }
 
