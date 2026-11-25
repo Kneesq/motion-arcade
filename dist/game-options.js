@@ -17,7 +17,7 @@ function loadPreferences() {
       ? key : paletteKeys.find(candidate => !playerColors.includes(candidate)));
   }
   const runnerEnv = ['sky', 'forest', 'ocean'].includes(saved?.runnerEnv) ? saved.runnerEnv : 'sky';
-  const bgm = ['auto', 'twinkle', 'tigers', 'lamb', 'happy', 'off'].includes(saved?.bgm) ? saved.bgm : 'auto';
+  const bgm = ['auto', 'babyshark', 'twinkle', 'tigers', 'lamb', 'happy', 'off'].includes(saved?.bgm) ? saved.bgm : 'auto';
   return {
     skin: saved?.skin === 'bubble' ? 'bubble' : 'balloon',
     colorChallenge: saved?.colorChallenge === true,
@@ -69,9 +69,10 @@ export function mountGameOptions(container) {
       </div>
     </fieldset>
     <fieldset data-setting="bgm">
-      <legend>童歌背景音乐</legend>
+      <legend>动感童歌音乐</legend>
       <div class="segments">
         <button type="button" data-choice="auto">轮播童歌</button>
+        <button type="button" data-choice="babyshark">Baby Shark</button>
         <button type="button" data-choice="twinkle">小星星</button>
         <button type="button" data-choice="tigers">两只老虎</button>
         <button type="button" data-choice="lamb">小羊羔</button>
