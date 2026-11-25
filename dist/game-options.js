@@ -1,4 +1,5 @@
 import {balloonPalette} from './arcade.js';
+import {gameAudio} from './sound.js';
 
 const storageKey = 'motion-arcade-game-options-v1';
 const paletteKeys = balloonPalette.map(color => color.key);
@@ -109,6 +110,10 @@ export function mountGameOptions(container) {
     const key = button.closest('fieldset').dataset.setting;
     preferences[key] = key === 'colorChallenge' ? button.dataset.choice === 'true' : button.dataset.choice;
     saveAndRefresh();
+    if (key === 'bgm') {
+      if (preferences.bgm === 'off') gameAudio.stop();
+      else gameAudio.previewBgm(preferences.bgm);
+    }
   });
 
   function saveAndRefresh() {
