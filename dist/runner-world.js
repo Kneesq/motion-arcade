@@ -262,6 +262,14 @@ function sprite(kind) {
   return tile;
 }
 
+export function drawAnimalSprite(ctx, kind, x, y, size, flip = false) {
+  ctx.save();
+  ctx.translate(x, y);
+  if (flip) ctx.scale(-1, 1);
+  ctx.drawImage(sprite(kind), -size * 87 / 176, -size * 164 / 176, size, size);
+  ctx.restore();
+}
+
 export function drawRoadside(ctx,w,h,c,age,view,distance) {
   const spacing=4.25, theme=scenes[c.scene], unit=Math.min(w,h);
   const first=Math.floor(distance/spacing);
