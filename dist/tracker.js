@@ -224,7 +224,7 @@ export class MotionTracker {
     return performance.now() - this.updated < 1000 ? this.players : [];
   }
 
-  async start({camera = 'user', players = 1, points = 2, onStatus = () => {}, onError = () => {}} = {}) {
+  async start({camera = 'user', mirror: mirrorOption, players = 1, points = 2, onStatus = () => {}, onError = () => {}} = {}) {
     this.stop();
     const session = this.session;
     const active = () => this.session === session;
@@ -265,7 +265,7 @@ export class MotionTracker {
       if (facing && facing !== camera && ['user', 'environment'].includes(facing)) {
         throw new Error('设备未提供所选镜头。请改选另一个镜头后重试。');
       }
-      const mirror = camera === 'user';
+      const mirror = typeof mirrorOption === 'boolean' ? mirrorOption : camera === 'user';
       video.muted = true;
       video.autoplay = true;
       video.playsInline = true;

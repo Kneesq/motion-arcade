@@ -187,7 +187,7 @@ async function begin(requestMode) {
   $('camera-count').textContent = '等待镜头';
   overlay('准备镜头','请在浏览器中允许使用相机。',[button('返回设置',setupAgain)]);
   try {
-    await tracker.start({...prefs,onStatus:message => {
+    await tracker.start({...prefs, mirror: game === balloonGame ? true : prefs.camera === 'user', onStatus:message => {
       if (token === revision && phase === 'loading') $('inter-desc').textContent = message;
     },onError:error => { if (token === revision) fail(error); }});
     if (revision !== token) return;
