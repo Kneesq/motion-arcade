@@ -54,6 +54,9 @@ function strokeDirection(track, sample) {
       if (dyL < -.46 && dyR < -.46) direction = 'up';
       if (dyL > .46 && dyR > .46) direction = 'down';
     }
+    if (!direction && Math.abs(dyL - dyR) > .78 && dyL * dyR < -.06) {
+      direction = 'alternate';
+    }
     // A new stroke needs fresh travel after the last direction change. Older
     // horizontal motion cannot reappear during a following vertical pump.
     if (direction && (direction === track.stroke || before.time >= track.strokeAt)) return direction;
@@ -102,6 +105,13 @@ function observeHands(track, sample) {
     return;
   }
   followEndpoint(track, sample);
+  const spread = Math.abs(sample.hands[0].x - sample.hands[1].x) / sample.width;
+  if (spread > .92) track.wideAt = time;
+  if (spread < .50 && time - (track.wideAt || -Infinity) <= .85 && time - (track.lastClap || -Infinity) > .35) {
+    track.lastClap = time;
+    track.wideAt = -Infinity;
+    gesture(track, 'clap-beat', time);
+  }
   const stroke = strokeDirection(track, sample);
   if (!stroke) {
     if (time - track.lastStroke > .18) track.stroke = null;
@@ -114,7 +124,12 @@ function observeHands(track, sample) {
   track.endpoint = null;
   let key;
   if (stroke === 'swipe-left' || stroke === 'swipe-right') {
+    const overhead = sample.hands[0].y < -.12 && sample.hands[1].y < -.12;
+    if (overhead) gesture(track, 'wave-both', time);
     key = stroke;
+    track.pump = null;
+  } else if (stroke === 'alternate') {
+    key = 'alternate-pump';
     track.pump = null;
   } else if (track.pump && track.pump.stroke !== stroke && time - track.pump.time <= 1.5) {
     key = 'hands-pump';
@@ -145,14 +160,15 @@ export function createDanceMotionTracker() {
       if (!sample) continue;
       seen.add(p.id);
       const jumping = p.gestures?.jump === true;
+      const ducking = p.gestures?.duck === true;
       let track = tracks.get(p.id);
       // getPlayers() reuses the last inference object between camera frames.
       // Sampling it every repaint could turn a stale wrist into a new stroke.
-      if (track && p === track.cameraFrame && jumping === track.jumping &&
+      if (track && p === track.cameraFrame && jumping === track.jumping && ducking === track.ducking &&
           sameSample(track.history[track.history.length - 1], sample)) continue;
       if (!track || time - track.lastSample > maxSampleGap) {
         track = {history: [], events: [], stroke: null, strokeAt: -Infinity,
-          lastStroke: -Infinity, pump: null, endpoint: null, jumping};
+          lastStroke: -Infinity, pump: null, endpoint: null, jumping, ducking};
         tracks.set(p.id, track);
       }
       if (time === track.lastSample) continue;
@@ -163,7 +179,9 @@ export function createDanceMotionTracker() {
       if (jumping && !track.jumping && track.history.some(s =>
         time - s.time <= .55 && s.bodyY - sample.bodyY >= .10 * sample.height
       )) gesture(track, 'jump', time);
+      if (ducking && !track.ducking) gesture(track, 'squat', time);
       track.jumping = jumping;
+      track.ducking = ducking;
       observeHands(track, sample);
       track.history.push(sample);
     }

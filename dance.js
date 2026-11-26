@@ -20,7 +20,7 @@ const poses = [
 ];
 
 const prefsKey = 'motion-party.dance.v1';
-const defaults = { bpm: 112, beats: 4, offset: 0, steps: [0, 10, 11, 3, 12, 7, 8, 13, 4, 9, 1, 2, 5, 6] };
+const defaults = { bpm: 112, beats: 4, offset: 0, steps: [0, 10, 14, 11, 15, 3, 12, 16, 17, 13, 7, 8, 4, 9] };
 let settings = loadSettings();
 let song = null;
 let library;
@@ -569,7 +569,7 @@ function drawCast(ctx, g, t, area) {
     const rows = Math.ceil(count / columns);
     const cellH = area.h / rows;
     // Leave room for the widest arm span, head bounce, shoes and player label.
-    return {columns, cellH, size: Math.min(area.w / columns / 2.55, (cellH - labelSpace) / 2.56)};
+    return {columns, cellH, size: Math.min(area.w / columns / 2.08, (cellH - labelSpace) / 2.12)};
   };
   // Duets stay side by side. Larger casts wrap when it gives them more room.
   let layout = grid(count);
@@ -658,24 +658,28 @@ function drawStudioCue(ctx, g, t, w, h, pad, pose, step, hint, next) {
 }
 
 function drawCameraCue(ctx, g, t, w, h, pose, step, hint, next) {
-  // Keep the middle of the live image clear, including in a four-person dance.
-  const count = g.scores.length, inset = clamp(Math.min(w, h) * .022, 5, 14);
-  const width = Math.min(w - inset * 2, 258 + 58 * count);
-  const height = clamp(h * .23, 66, 122);
-  const x = inset, y = inset, textX = x + inset;
-  const guideWidth = Math.min(width * (count > 2 ? .51 : .45), count * height);
-  const textWidth = width - guideWidth - 2 * inset;
-  ctx.lineWidth = 1;
-  panel(ctx, x, y, width - guideWidth, height, 13, 'rgba(38,26,52,.82)', '#eed6ff70');
-  drawCast(ctx, g, t, {x:x + width - guideWidth, y:y + 3, w:guideWidth - 4, h:height - 6});
-  const small = clamp(height * .125, 10, 14);
-  text(ctx, step, textX, y + height * .13, small, lime, 'left', 700, textWidth);
-  text(ctx, pose.name, textX, y + height * .35, clamp(height * .24, 17, 25), ink, 'left', 800, textWidth);
-  const lines = hint.split('，');
-  lines.forEach((line, i) => {
-    text(ctx, line, textX, y + height * (.57 + i * .145), small, ink, 'left', 650, textWidth);
-  });
-  if (next) text(ctx, next, textX, y + height * .90, small, dim, 'left', 650, textWidth);
+  // Prominent dancer guide panel on the right, compact instruction card on the left.
+  const count = g.scores.length, inset = clamp(Math.min(w, h) * .022, 6, 16);
+  const guideH = clamp(h * .44, 150, 300);
+  const guideW = clamp(w * (count > 1 ? .46 : .34), 130, 340);
+  const guideX = w - inset - guideW, guideY = inset;
+  const textW = Math.min(guideX - inset * 2, 270);
+  const textH = clamp(h * .21, 78, 126);
+  const x = inset, y = inset, textX = x + 12;
+  ctx.lineWidth = 1.2;
+  if (textW > 90) {
+    panel(ctx, x, y, textW, textH, 14, 'rgba(38,26,52,.82)', '#eed6ff70');
+    const small = clamp(textH * .135, 11, 15);
+    text(ctx, step, textX, y + textH * .15, small, lime, 'left', 700, textW - 20);
+    text(ctx, pose.name, textX, y + textH * .38, clamp(textH * .24, 18, 27), ink, 'left', 800, textW - 20);
+    const lines = hint.split('，');
+    lines.forEach((line, i) => {
+      text(ctx, line, textX, y + textH * (.60 + i * .145), small, ink, 'left', 650, textW - 20);
+    });
+    if (next) text(ctx, next, textX, y + textH * .90, small, dim, 'left', 650, textW - 20);
+  }
+  panel(ctx, guideX, guideY, guideW, guideH, 16, 'rgba(38,26,52,.58)', '#eed6ff66');
+  drawCast(ctx, g, t, {x: guideX + 4, y: guideY + 6, w: guideW - 8, h: guideH - 12});
 }
 
 function draw(ctx, {w, h, cameraVisible}) {

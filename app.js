@@ -269,10 +269,6 @@ function tick(now) {
   const players = mode === 'camera' ? tracker.getPlayers() : [];
   if (mode === 'camera') {
     cameraCount(players);
-    if (players.length < prefs.players) {
-      loseSince ||= now;
-      if (now-loseSince > 1800) { pause('请回到镜头前','所有玩家重新入镜后，点「继续游戏」。'); return; }
-    } else loseSince = 0;
   }
   const frame = {w,h,dt,time:elapsed,players,cameraVisible:mode === 'camera'};
   game.update(frame);

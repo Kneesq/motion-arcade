@@ -4,7 +4,11 @@ export const dynamicMoves = [
   {key:'swipe-left', name:'双手左滑', two:'双手放在右侧，一起向画面左侧划过', hands:[[-.94,-.27],[-.59,-.13]]},
   {key:'swipe-right', name:'双手右滑', two:'双手放在左侧，一起向画面右侧划过', hands:[[.59,-.13],[.94,-.27]]},
   {key:'hands-pump', name:'双手上下摆', two:'双手从腰边举过肩，再摆回腰边', hands:[[-.48,.24],[.48,.24]]},
-  {key:'jump', name:'原地跳跃', two:'轻轻屈膝，跟拍跳起并落回原地', four:'双脚一起离地，轻轻落回原位', hands:[[-.48,.24],[.48,.24]]}
+  {key:'jump', name:'原地跳跃', two:'轻轻屈膝，跟拍跳起并落回原地', four:'双脚一起离地，轻轻落回原位', hands:[[-.48,.24],[.48,.24]]},
+  {key:'squat', name:'深蹲弹起', two:'跟拍向下蹲低，再迅速站起', hands:[[-.62,.04],[.62,.04]]},
+  {key:'wave-both', name:'头顶挥手', two:'双手举过头顶，左右大幅摇摆', hands:[[-.52,-1.02],[.52,-1.02]]},
+  {key:'clap-beat', name:'胸前拍手', two:'双臂向两侧打开，跟拍在胸前合掌拍手', hands:[[-.08,-.18],[.08,-.18]]},
+  {key:'alternate-pump', name:'交替出拳', two:'左右手交替向上挥拳、向下收回', hands:[[-.52,-.92],[.52,.22]]}
 ];
 
 function portion(value, start, end) {
@@ -59,6 +63,39 @@ export function sampleDanceMove(key, progress) {
       lift:.245 * flight, squash:1 - .15 * crouch - .075 * landing
     };
   }
+  if (key === 'squat') {
+    const down = smooth(p, .12, .56) * (1 - smooth(p, .62, .94));
+    const handX = .48 + .26 * down;
+    const handY = .24 - .24 * down;
+    const footX = .32 + .14 * down;
+    return {
+      hands:[[-handX, handY], [handX, handY]],
+      feet:[[-footX, .95], [footX, .95]],
+      lift:0, squash:1 - .28 * down
+    };
+  }
+  if (key === 'wave-both') {
+    const sway = Math.sin(smooth(p, .08, .88) * Math.PI * 2);
+    const liftHands = smooth(p, 0, .14) * (1 - smooth(p, .86, 1));
+    const lx = -.48 + sway * .32;
+    const rx = .48 + sway * .32;
+    const y = .24 + (-1.04 - .24) * liftHands + Math.abs(sway) * .08;
+    return {hands:[[lx, y], [rx, y]], feet:standingFeet, lift:0, squash:1 - .04 * Math.abs(sway)};
+  }
+  if (key === 'clap-beat') {
+    const open = smooth(p, .06, .38) * (1 - smooth(p, .44, .75));
+    const clap = smooth(p, .44, .75) * (1 - smooth(p, .82, 1));
+    const x = .48 + .50 * open - .42 * clap;
+    const y = .24 - .42 * Math.max(open, clap);
+    return {hands:[[-x, y], [x, y]], feet:standingFeet, lift:0, squash:1 - .06 * clap};
+  }
+  if (key === 'alternate-pump') {
+    const wave = Math.sin(smooth(p, .08, .86) * Math.PI * 2);
+    const active = smooth(p, 0, .12) * (1 - smooth(p, .88, 1));
+    const ly = .24 - (.62 + .54 * wave) * active;
+    const ry = .24 - (.62 - .54 * wave) * active;
+    return {hands:[[-.52, ly], [.52, ry]], feet:standingFeet, lift:.03 * Math.abs(wave), squash:1};
+  }
   return {hands:[[-.48,.24],[.48,.24]], feet:standingFeet, lift:0, squash:1};
 }
 
@@ -81,6 +118,22 @@ export function drawDanceMotionCue(ctx,{key,x,y,size,progress,accent}) {
   } else if (key === 'jump') {
     tailX = headX = .75; tailY = .77; headY = .23;
     fraction = smooth(p,.35,.73);
+  } else if (key === 'squat') {
+    tailX = headX = .78; tailY = .18; headY = .74;
+    fraction = smooth(p,.12,.56);
+  } else if (key === 'wave-both') {
+    const right = p < .5;
+    tailX = right ? -.45 : .45; headX = right ? .45 : -.45;
+    tailY = headY = -1.18;
+    fraction = right ? smooth(p,.08,.48) : smooth(p,.48,.88);
+  } else if (key === 'clap-beat') {
+    tailX = .98; headX = .36; tailY = headY = -.18;
+    fraction = smooth(p,.44,.75);
+  } else if (key === 'alternate-pump') {
+    const leftUp = p < .5;
+    tailX = headX = leftUp ? -.88 : .88;
+    tailY = .22; headY = -.52;
+    fraction = leftUp ? smooth(p,.08,.48) : smooth(p,.48,.86);
   } else return;
 
   ctx.save();

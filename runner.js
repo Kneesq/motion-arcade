@@ -1,5 +1,5 @@
 import {polygon, ellipse, panel} from './canvas-shapes.js';
-import {scenes, createScenery, horizonScene, drawRoadside, updateAmbientAnimals, drawAmbientAnimals} from './runner-world.js';
+import {scenes, createScenery, horizonScene, drawRoadside, updateAmbientAnimals, drawAmbientAnimals, drawAnimalSprite} from './runner-world.js';
 
 // Camera gestures and touch input use the same player IDs and scoring windows.
 const ink = '#343044';
@@ -32,7 +32,10 @@ function newPlayer(id) {
 }
 
 function makeCourse(ids, variant, scene) {
-  const course = {ids, variant, scene, index:0, cleared:0, stage:0, scenery:createScenery(), done:false};
+  const course = {
+    ids, variant, scene, index:0, cleared:0, stage:0, scenery:createScenery(), done:false,
+    distance:variant * 1.6, speed:4.6, stopEvent:null, stopEventDone:false
+  };
   nextEvents(course, 0);
   return course;
 }
@@ -96,14 +99,67 @@ function scoreEvent(s, c, pickup) {
   if (!pickup) s.onSfx?.(winners.length ? 'clear' : 'miss');
 }
 
+const stopWaves = [
+  {kind:'duck', visual:'rock', label:'飞石来袭'},
+  {kind:'jump', visual:'animal', label:'动物冲来'},
+  {kind:'duck', visual:'animal', label:'飞兽俯冲'},
+  {kind:'jump', visual:'rock', label:'滚石来袭'}
+];
+
+function startStopWave(c, age, wave) {
+  const spec = stopWaves[(wave + c.variant) % stopWaves.length];
+  const animals = scenes[c.scene].animals;
+  c.stopEvent = {
+    wave, total: stopWaves.length, start: age, at: age + (wave === 0 ? 3.1 : 2.55),
+    kind: spec.kind, visual: spec.visual, label: spec.label,
+    animal: animals[(wave + c.variant) % animals.length], result: null
+  };
+}
+
+function scoreStopEvent(s, c) {
+  const ev = c.stopEvent;
+  const winners = [];
+  for (const id of c.ids) {
+    const player = s.players[id];
+    if (matches(player, ev.kind, s.age)) {
+      player.score += 15;
+      player.gates++;
+      player.note = {at:s.age, label:'+15', yes:true};
+      winners.push(id);
+    } else {
+      player.note = {at:s.age, label:'击中', yes:false};
+    }
+  }
+  ev.result = {at:s.age, winners};
+  s.onSfx?.(winners.length ? 'clear' : 'miss');
+}
+
 function progressCourse(s,c) {
   if (c.done) return;
+  if (c.stopEvent) {
+    const ev = c.stopEvent;
+    if (!ev.result && s.age >= ev.at + .12) scoreStopEvent(s, c);
+    if (ev.result && s.age >= ev.at + .92) {
+      if (ev.wave + 1 < ev.total) startStopWave(c, s.age, ev.wave + 1);
+      else {
+        c.stopEvent = null;
+        c.stopEventDone = true;
+        c.index++;
+        nextEvents(c, s.age);
+      }
+    }
+    return;
+  }
   if (!c.pickResult && s.age >= c.pickAt+.12) scoreEvent(s,c,true);
   if (!c.gateResult && s.age >= c.gateAt+.12) scoreEvent(s,c,false);
   const lastInScene = c.index % 4 === 3;
   if (!c.gateResult || s.age < c.gateAt + (lastInScene ? 1.3 : .85)) return;
   if (c.index === rounds-1 || (!s.versus && lastInScene && c.cleared < 2)) {
     c.done = true;
+    return;
+  }
+  if (c.index === 5 && !c.stopEventDone) {
+    startStopWave(c, s.age, 0);
     return;
   }
   c.index++;
@@ -165,23 +221,22 @@ function projection(w,h,c,age,player) {
   const head=player?.head ?? 0;
   const jumpAmt=Math.max(0,-head);
   const duckAmt=Math.max(0,head);
+  const runRatio=clamp((c.speed ?? 4.6) / 4.6, 0, 1.2);
   const stride=age*9.2+c.variant*1.4;
-  const bobY=Math.sin(stride)*.042*(1-jumpAmt*.7);
-  const bobX=Math.cos(stride*.5)*.024*(1-jumpAmt*.5);
-  const horizon=h*(.43+jumpAmt*.055-duckAmt*.055+bobY*.16);
+  const bobY=Math.sin(stride)*.038*(1-jumpAmt*.7)*runRatio;
+  const horizon=h*(.43+jumpAmt*.055-duckAmt*.055+bobY*.14);
   const halfRoad=w*.72;
-  const bend=Math.sin(age*.32+c.variant*2.4)*w*.068;
   const camY=1.0+bobY+jumpAmt*.65-duckAmt*.42;
   const lean=player?.lean ?? 0;
   const project=(z,offset=0,worldY=0)=>{
     const scale=1/(1+Math.max(-.42,z)*1.04);
     return {
-      x:w*.5+scale*halfRoad*(offset-lean*.64-bobX)+bend*(1-Math.min(1,scale))**2,
+      x:w*.5+scale*halfRoad*(offset-lean*.64),
       y:horizon+scale*(h-horizon)*1.09*(camY-worldY),
       scale
     };
   };
-  return {horizon,project,vanishingX:w*.5+bend,camY,jumpAmt,duckAmt};
+  return {horizon,project,vanishingX:w*.5,camY,jumpAmt,duckAmt,runRatio};
 }
 
 function band(ctx,project,a,b,left,right,color) {
@@ -194,7 +249,7 @@ function road(ctx,w,h,c,age,view) {
   const surface=theme.road;
   const baseLeft=project(29,-1),baseRight=project(29,1);
   polygon(ctx,[[view.vanishingX,view.horizon],[baseRight.x,baseRight.y],[baseLeft.x,baseLeft.y]],surface[0]);
-  const distance=age*(4.6+c.stage*.2)+c.variant*1.6;
+  const distance=c.distance;
   const phase=distance%1;
   for(let i=30;i>=-1;i--) {
     const a=Math.max(-.42,i-phase), b=i+1-phase;
@@ -309,6 +364,28 @@ function pickupBurst(ctx,w,h,c,age,player) {
 
 function displayCue(c,age,versus,player) {
   if (c.done) return {message:'到达终点',instruction:'等待另一条赛道',progress:1,color:'#dcf4ae'};
+  if (c.stopEvent) {
+    const ev = c.stopEvent;
+    if (ev.result) {
+      const success = eventWon(ev.result, player);
+      return {
+        message: success ? '成功躲避 +15' : '被击中了',
+        instruction: `停下躲避 · ${ev.wave + 1}/${ev.total}`,
+        progress: 1,
+        color: success ? '#ddf5a5' : '#ffd1bf'
+      };
+    }
+    const now = ev.at - age < .68;
+    const timing = now ? '现在' : '准备';
+    const actionText = actionLabels[ev.kind];
+    return {
+      message: `${timing} · ${actionText}`,
+      shortText: `${ev.label} · ${timing}${actionText}`,
+      instruction: `跑道暂停 · ${ev.label} (${ev.wave + 1}/${ev.total})`,
+      progress: clamp((age - ev.start) / (ev.at - ev.start), 0, 1),
+      color: now ? '#e2f8a3' : '#ffe6b8'
+    };
+  }
   if (c.gateResult) {
     const success=eventWon(c.gateResult, player);
     const check=c.index%4===3 && !versus;
@@ -438,12 +515,13 @@ function drawRunner(ctx, w, h, c, age, view, player, slotOffset = 0, showTag = f
   const jumpAmt = Math.max(0, -head);
   const duckAmt = Math.max(0, head);
   const stride = age * 9.2 + c.variant * 1.4 + (player?.id ?? 0) * 0.9;
-  const bounce = Math.abs(Math.sin(stride * 0.5)) * 0.03 * (1 - jumpAmt * 0.8) * (1 - duckAmt * 0.6);
+  const runScale = view.runRatio ?? 1;
+  const bounce = Math.abs(Math.sin(stride * 0.5)) * 0.03 * (1 - jumpAmt * 0.8) * (1 - duckAmt * 0.6) * runScale;
   const worldY = jumpAmt * 0.55 + bounce;
   const foot = view.project(runnerZ, slotOffset + lean * 0.35, worldY);
   const unit = Math.min(w, h) * foot.scale;
   const s = unit * 0.17;
-  const swing = Math.sin(stride) * (1 - jumpAmt * 0.65) * (1 - duckAmt * 0.5);
+  const swing = Math.sin(stride) * (1 - jumpAmt * 0.65) * (1 - duckAmt * 0.5) * runScale;
   const crouch = 1 - duckAmt * 0.46;
   const silhouette = '#2b2d38';
 
@@ -482,26 +560,78 @@ function drawRunner(ctx, w, h, c, age, view, player, slotOffset = 0, showTag = f
   ctx.restore();
 }
 
+function drawStopHazard(ctx, w, h, c, view, age) {
+  const ev = c.stopEvent;
+  if (!ev) return;
+  const remain = ev.at - age;
+  if (remain < -0.22) return;
+  const z = remain * 3.1;
+  const unit = Math.min(w, h);
+  const high = ev.kind === 'duck';
+  const worldY = high ? 1.04 : 0.28;
+  const ground = view.project(z, 0, 0);
+  const pt = view.project(z, 0, worldY);
+  const scale = pt.scale;
+  const r = unit * 0.19 * scale;
+  ellipse(ctx, ground.x, ground.y, r * 0.92, Math.max(1.5, r * 0.22), 'rgba(46, 36, 56, 0.24)');
+
+  if (ev.visual === 'rock') {
+    ctx.save();
+    ctx.translate(pt.x, pt.y);
+    ctx.rotate(age * (high ? 4.8 : -6.2));
+    const pts = [];
+    for (let i = 0; i < 9; i++) {
+      const a = (tau * i) / 9;
+      const rad = r * (0.86 + 0.18 * Math.sin(i * 2.7));
+      pts.push([Math.cos(a) * rad, Math.sin(a) * rad]);
+    }
+    ctx.lineWidth = Math.max(1.5, r * 0.08);
+    polygon(ctx, pts, '#7a7284', '#3f3848');
+    polygon(ctx, pts.slice(0, 5).map(([px, py]) => [px * 0.62 - r * 0.12, py * 0.62 - r * 0.12]), '#a39bb0');
+    ctx.restore();
+  } else {
+    const size = unit * 0.56 * scale;
+    const bob = high ? Math.sin(age * 9) * size * 0.04 : Math.abs(Math.sin(age * 11)) * size * 0.08;
+    drawAnimalSprite(ctx, ev.animal, pt.x, pt.y + size * 0.36 - bob, size, false);
+  }
+
+  const badgeW = Math.max(44, r * 2.1);
+  const badgeH = Math.max(14, r * 0.62);
+  const badgeY = pt.y - r * 1.18 - badgeH * 0.5;
+  ctx.lineWidth = Math.max(1, r * 0.05);
+  panel(ctx, pt.x - badgeW * 0.5, badgeY, badgeW, badgeH, badgeH * 0.4, high ? '#fff4cf' : '#e9f9b8', ink);
+  label(ctx, high ? '↓ 蹲下' : '↑ 跳起', pt.x, badgeY + badgeH * 0.5, Math.max(9, badgeH * 0.62), ink, 'center', 850);
+}
+
 function drawView(ctx,x,y,w,h,c,s,player) {
   const view=projection(w,h,c,s.age,player);
   const runnerZ = 0.42;
   const gateZ = (c.gateAt - s.age) * 2.25;
   const pickZ = (c.pickAt - s.age) * 1.82;
+  const hazardZ = c.stopEvent ? (c.stopEvent.at - s.age) * 3.1 : Infinity;
   const runners = player ? [player] : c.ids.map(id => s.players[id]);
   const span = Math.min(1.05, 0.46 * (runners.length - 1));
   ctx.save();ctx.translate(x,y);
   ctx.beginPath();ctx.rect(0,0,w,h);ctx.clip();
   horizonScene(ctx,w,h,c,s.age,view.horizon);
   road(ctx,w,h,c,s.age,view);
-  if (gateZ >= runnerZ) gate(ctx,w,h,c,view,s.age);
-  if (pickZ >= runnerZ) pickup(ctx,w,h,c,view,s.age);
+  if (c.stopEvent) {
+    if (hazardZ >= runnerZ) drawStopHazard(ctx,w,h,c,view,s.age);
+  } else {
+    if (gateZ >= runnerZ) gate(ctx,w,h,c,view,s.age);
+    if (pickZ >= runnerZ) pickup(ctx,w,h,c,view,s.age);
+  }
   runners.forEach((p, idx) => {
     const slotOffset = runners.length === 1 ? 0 : ((idx / (runners.length - 1)) - 0.5) * span;
     drawRunner(ctx, w, h, c, s.age, view, p, slotOffset, runners.length > 1);
   });
-  if (gateZ < runnerZ) gate(ctx,w,h,c,view,s.age);
-  if (pickZ < runnerZ) pickup(ctx,w,h,c,view,s.age);
-  speedLines(ctx,w,h,s.age,view);
+  if (c.stopEvent) {
+    if (hazardZ < runnerZ) drawStopHazard(ctx,w,h,c,view,s.age);
+  } else {
+    if (gateZ < runnerZ) gate(ctx,w,h,c,view,s.age);
+    if (pickZ < runnerZ) pickup(ctx,w,h,c,view,s.age);
+  }
+  if (view.runRatio > 0.15) speedLines(ctx,w,h,s.age,view);
   pickupBurst(ctx,w,h,c,s.age,player);
   hud(ctx,w,h,c,s,player,false);
   ctx.restore();
@@ -537,8 +667,11 @@ export const runnerGame = {
       player.head += (head-player.head)*blend;
     }
     for(const course of s.courses) {
+      const targetSpeed = course.stopEvent ? 0 : (4.6 + course.stage * .2);
+      course.speed += (targetSpeed - course.speed) * Math.min(1, elapsed * 5);
+      course.distance += course.speed * elapsed;
       progressCourse(s,course);
-      updateAmbientAnimals(course, elapsed, 4.6 + course.stage * .2);
+      updateAmbientAnimals(course, elapsed, Math.max(1.2, course.speed));
     }
     if(s.courses.every(c=>c.done)) finish(s);
   },
